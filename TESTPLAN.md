@@ -253,19 +253,34 @@ Nicht automatisierbar ohne echten Browser bzw. echtes Gerät:
 - Eingabe lateinischer Sonderzeichen (Makronen) in Karteninhalte prüfen, nicht nur deren Anzeige
   in der Oberfläche.
 
-## Testplan für Inkrement 6
+## Inkrement 6 – Auslieferung als zwei Artefakte
 
-Inkrement 6 existiert noch nicht; die folgenden Punkte legen fest, was mit automatisierten
-`node --test`-Regressionstests abgedeckt wird, sobald die Funktion gebaut ist. Grundlage sind
-die Abnahmekriterien aus CLAUDE.md und die Regeln aus `vokabel-app-entwurf.md`.
+Automatisiert durch `test/build.test.mjs` und `test/icon-render.test.mjs`:
 
-### Inkrement 6 – Auslieferung als zwei Artefakte
+- `dist/app.html` und `dist/pages/` entstehen aus derselben Quelle; Skript und CSS sind in
+  beiden Artefakten byteidentisch, der Unterschied beschränkt sich auf Manifest, Service Worker,
+  apple-touch-icon und die Registrierung selbst.
+- Service Worker ersetzt sich bei neuer Versionsnummer sauber: ein gemockter Worker-Kontext
+  (eigenes In-Memory-`caches`, kein echter Browser) prüft, dass `install` einen neuen
+  Cache-Eintrag anlegt und `activate` jeden Cache-Namen außer dem aktuellen löscht, ohne
+  `IndexedDB` zu berühren (der Mock kennt `IndexedDB` gar nicht).
+- Manifest ist valide JSON, referenziert nur eigene, tatsächlich vorhandene Dateien ohne externe
+  URLs und enthält mindestens ein 512×512-PNG-Icon.
+- Die PNG-Icons (192, 512, apple-touch-icon 180) werden aus derselben prozeduralen Zeichnung wie
+  `src/icon.svg` gerendert (`build/icon-render.mjs` + `build/png.mjs`, ohne externe
+  Bild-Bibliothek), haben eine gültige PNG-Signatur und die erwarteten Abmessungen; ein Test
+  vergleicht die Kernfarben mit `icon.svg`, damit beide Zeichnungen nicht unbemerkt auseinander-
+  laufen.
 
-- `dist/app.html` und `dist/pages/` entstehen aus derselben Quelle und unterscheiden sich laut
-  Diff nur in Installierbarkeit/Offline-Cache-Anteilen (bereits in `test/build.test.mjs`
-  angelegt, wird hier vertieft).
-- Service Worker ersetzt sich bei neuer Versionsnummer sauber, ohne `IndexedDB`-Daten zu
-  berühren (Cache-Name-Wechsel, alte Caches werden gelöscht).
-- Manifest ist valide und referenziert nur eigene Dateien.
-- Vollständige manuelle Geräteprüfliste (siehe oben) auf echten iPadOS-/Android-/Desktop-Geräten,
-  inklusive Installation und Offline-Start nach Deinstallation der Internetverbindung.
+Nicht automatisierbar, bleibt manuelle Prüfung (siehe Prüfliste oben):
+
+- Echte Service-Worker-Registrierung, Installation und Offline-Start in einem echten Browser.
+  Die im Projekt verfügbare eingebettete Browser-Sandbox lehnt Service-Worker-Registrierung
+  grundsätzlich ab (`TypeError: ... An unknown error occurred when fetching the script.`, auch
+  bei korrektem Content-Type und erreichbarem `sw.js`) – das ist eine Einschränkung dieser
+  Testumgebung, keine geprüfte Browser-Inkompatibilität der App.
+- `dist/pages/` auf einem echten GitHub-Pages-Deploy installieren und Offline-Start auf
+  iPadOS/Android/Desktop testen, inklusive Update-Verhalten bei neuer Version.
+- Repository-Einstellung „Settings → Pages → Source: GitHub Actions“ ist ein einmaliger,
+  manueller Schritt außerhalb dieses Bau-Skripts; `.github/workflows/deploy-pages.yml` baut und
+  veröffentlicht danach bei jedem Push auf `main` automatisch.

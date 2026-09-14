@@ -4,10 +4,11 @@ Digitaler Karteikasten, lokal im Browser, ohne Konto und ohne Internetverbindung
 Laufzeit. Die fachliche Spezifikation steht in [`vokabel-app-entwurf.md`](vokabel-app-entwurf.md),
 die Regeln für die Zusammenarbeit in [`CLAUDE.md`](CLAUDE.md).
 
-Stand: Inkrement 5 (Datenmodell, Speicherschicht, Editor, Lernmodus mit Kästen und
+Stand: Inkrement 6 (Datenmodell, Speicherschicht, Editor, Lernmodus mit Kästen und
 Reparaturkiste, Testmodus mit den drei Zielarten, manuell überschreibbares Hell/Dunkel,
 Statistik mit Lernserie, Heatmap und Kastenverteilung, vollständige Mehrsprachigkeit in
-Deutsch, Englisch, Spanisch, Französisch und Latein).
+Deutsch, Englisch, Spanisch, Französisch und Latein, Auslieferung als eigenständige HTML-Datei
+und als installierbare, offlinefähige Web-App).
 
 ## Bauen
 
@@ -16,7 +17,15 @@ node build.mjs
 ```
 
 Erzeugt `dist/app.html` (eigenständige Einzeldatei, läuft per Doppelklick über `file://`)
-und `dist/pages/` (Ordner für GitHub Pages mit Manifest und Service Worker).
+und `dist/pages/` (Ordner für GitHub Pages mit Manifest, Service Worker und PNG-Icons für
+Installierbarkeit).
+
+## Veröffentlichen auf GitHub Pages
+
+`.github/workflows/deploy-pages.yml` baut bei jedem Push auf `main` automatisch und
+veröffentlicht `dist/pages/`. Voraussetzung ist einmalig, dass im Repository unter
+„Settings → Pages → Source“ die Option „GitHub Actions“ ausgewählt ist; das ist ein manueller
+Schritt außerhalb dieses Repos.
 
 ## Testen
 
@@ -59,6 +68,12 @@ src/
     views.js          Ansichten
     app.js            Bootstrap, Routing, Zustand
 build.mjs             Abhängigkeitsfreies Bau-Skript
+build/
+  png.mjs             Minimaler PNG-Encoder (nur node:zlib, keine externe Bibliothek)
+  icon-render.mjs      Zeichnet das App-Icon prozedural fürs PNG-Rendern (dupliziert die
+                      Form aus src/icon.svg, siehe Kommentar dort)
+.github/workflows/
+  deploy-pages.yml     Baut und veröffentlicht dist/pages/ bei Push auf main
 ```
 
 Kein Framework, kein Build-Schritt mit fremden Werkzeugen, keine Laufzeitabhängigkeiten.

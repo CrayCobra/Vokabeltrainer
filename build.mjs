@@ -7,8 +7,10 @@
 // Installierbarkeit und Offline-Cache.
 
 import { readFile, writeFile, mkdir, rm, readdir } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { encodePNG } from './build/png.mjs';
+import { renderIconRGBA } from './build/icon-render.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(ROOT, 'src');
@@ -165,7 +167,7 @@ async function buildAppHtml(script, css, version) {
   await writeFile(path.join(DIST, 'app.html'), html, 'utf8');
 }
 
-function buildManifest(version) {
+export function buildManifest(version) {
   return JSON.stringify(
     {
       name: 'Vokabeltrainer',
@@ -176,7 +178,11 @@ function buildManifest(version) {
       display: 'standalone',
       background_color: '#ffffff',
       theme_color: '#0a58ca',
-      icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+      icons: [
+        { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+        { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      ],
       lang: 'de',
       version,
     },
@@ -185,11 +191,21 @@ function buildManifest(version) {
   );
 }
 
-function buildServiceWorker(version) {
+export function buildServiceWorker(version) {
   return `// Wird bei neuer Version sauber ersetzt; cacht ausschließlich eigene Dateien,
 // ohne Nutzerdaten (die liegen in IndexedDB, nicht im Cache) zu berühren.
 const CACHE_NAME = 'vokabeltrainer-${version}';
-const APP_SHELL = ['./', './index.html', './app.css', './app.js', './manifest.webmanifest', './icon.svg'];
+const APP_SHELL = [
+  './',
+  './index.html',
+  './app.css',
+  './app.js',
+  './manifest.webmanifest',
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -224,7 +240,12 @@ async function buildPages(script, css, version) {
     /<script type="module">[\s\S]*?<\/script>/,
     '<script src="app.js"></script>'
   );
-  html = html.replace('</head>', '  <link rel="icon" href="icon.svg">\n  <link rel="manifest" href="manifest.webmanifest">\n</head>');
+  html = html.replace(
+    '</head>',
+    '  <link rel="icon" href="icon.svg">\n' +
+      '  <link rel="apple-touch-icon" href="apple-touch-icon.png">\n' +
+      '  <link rel="manifest" href="manifest.webmanifest">\n</head>'
+  );
   html = html.replace(
     '</body>',
     '  <script>if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("sw.js")); }</script>\n</body>'
@@ -236,6 +257,12 @@ async function buildPages(script, css, version) {
   await writeFile(path.join(pagesDir, 'manifest.webmanifest'), buildManifest(version), 'utf8');
   await writeFile(path.join(pagesDir, 'sw.js'), buildServiceWorker(version), 'utf8');
   await writeFile(path.join(pagesDir, 'icon.svg'), await readFile(path.join(SRC, 'icon.svg'), 'utf8'), 'utf8');
+
+  // Aus derselben prozeduralen Zeichnung wie icon.svg (siehe build/icon-render.mjs) gerendert,
+  // nicht aus der SVG-Datei konvertiert: ein SVG-Renderer wäre eine zusätzliche Abhängigkeit.
+  await writeFile(path.join(pagesDir, 'icon-192.png'), encodePNG(192, 192, renderIconRGBA(192)));
+  await writeFile(path.join(pagesDir, 'icon-512.png'), encodePNG(512, 512, renderIconRGBA(512)));
+  await writeFile(path.join(pagesDir, 'apple-touch-icon.png'), encodePNG(180, 180, renderIconRGBA(180)));
 }
 
 async function main() {
@@ -253,7 +280,11 @@ async function main() {
   console.log(`Version ${version} gebaut: dist/app.html und dist/pages/`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+// Nur ausführen, wenn direkt gestartet (node build.mjs) – nicht, wenn Tests einzelne
+// Bau-Funktionen wie buildServiceWorker importieren, ohne einen echten Bau auszulösen.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}

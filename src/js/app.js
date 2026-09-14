@@ -11,6 +11,8 @@ import { recordSession, nowIso } from './model.js';
 import { createSessionQueue } from './learn.js';
 import { describeGoalProgress } from './testgoal.js';
 import { loadThemePreference, saveThemePreference, applyThemePreference } from './theme.js';
+import { translate, LANGUAGES, LANGUAGE_NAMES, localeForLanguage } from './i18n.js';
+import { loadUiLanguage, saveUiLanguage } from './uilang.js';
 
 const VIEWS = ['karten', 'erfassen', 'import', 'lernen', 'testen', 'einstellungen', 'statistik'];
 
@@ -31,11 +33,9 @@ function viewFromHash() {
   return VIEWS.includes(hash) ? hash : 'karten';
 }
 
-function describeStorageError(err) {
-  if (err && err.name === 'QuotaExceededError') {
-    return 'Der Speicher des Browsers ist voll. Sichere deinen Stand jetzt als Datei und lösche nicht mehr benötigte Karten.';
-  }
-  return 'Speichern ist fehlgeschlagen. Bitte sichere deinen Stand als Datei, damit nichts verloren geht.';
+function storageErrorKey(err) {
+  if (err && err.name === 'QuotaExceededError') return 'toast.storageQuota';
+  return 'toast.saveFailed';
 }
 
 export async function startApp(root) {
@@ -55,6 +55,27 @@ export async function startApp(root) {
     saveThemePreference(value);
     applyThemePreference(value);
     render();
+  }
+
+  // Oberflächensprache: unabhängig von den Stapelsprachen. localStorage ist maßgeblich;
+  // profile.uiLang im Dokument ist nur ein portabler Hinweis (siehe setLanguage) und wird nie
+  // zurückgelesen, um localStorage zu überschreiben.
+  let uiLang = loadUiLanguage();
+  function t(key, params) {
+    return translate(uiLang, key, params);
+  }
+  document.documentElement.lang = uiLang;
+
+  function setLanguage(lang) {
+    if (lang === uiLang) return;
+    uiLang = lang;
+    saveUiLanguage(lang);
+    document.documentElement.lang = lang;
+    if (doc) {
+      persist({ ...doc, profile: { ...doc.profile, uiLang: lang } }).then(render);
+    } else {
+      render();
+    }
   }
 
   // Liegt außerhalb von root, damit ein Neuaufbau der Ansicht (renderShell räumt root bei
@@ -96,7 +117,7 @@ export async function startApp(root) {
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'icon-btn toast-close';
-    closeBtn.setAttribute('aria-label', 'Meldung schließen');
+    closeBtn.setAttribute('aria-label', t('common.dismiss'));
     closeBtn.appendChild(icons.close());
     closeBtn.addEventListener('click', () => {
       region.textContent = '';
@@ -110,7 +131,7 @@ export async function startApp(root) {
 
   function render() {
     if (!doc) {
-      renderOnboarding(root, { APP_VERSION, emptyReason, setInitialDoc });
+      renderOnboarding(root, { APP_VERSION, emptyReason, setInitialDoc, t, lang: uiLang });
       return;
     }
     renderShell(root, ctx);
@@ -129,7 +150,7 @@ export async function startApp(root) {
     try {
       await repo.save(newDoc);
     } catch (err) {
-      showToast({ message: describeStorageError(err) });
+      showToast({ message: t(storageErrorKey(err)) });
       throw err;
     }
     doc = newDoc;
@@ -143,7 +164,7 @@ export async function startApp(root) {
     try {
       await repo.save(docToSave);
     } catch (err) {
-      showToast({ message: describeStorageError(err) });
+      showToast({ message: t(storageErrorKey(err)) });
     }
   }, { delay: 400 });
 
@@ -242,7 +263,7 @@ export async function startApp(root) {
         return;
       }
       const progress = describeGoalProgress(ts.goal, testSessionStats(ts));
-      progressEl.textContent = progress.text;
+      progressEl.textContent = t(progress.key, progress.params);
       const badge = document.getElementById('test-goal-badge');
       if (badge) badge.hidden = !progress.reached;
     }, 1000);
@@ -340,7 +361,7 @@ export async function startApp(root) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     persist(stamped).then(() => {
       render();
-      showToast({ message: 'Sicherung wurde heruntergeladen.' });
+      showToast({ message: t('toast.backupDownloaded') });
     });
   }
 
@@ -368,6 +389,16 @@ export async function startApp(root) {
       return themePreference;
     },
     setThemePreference,
+    t,
+    get lang() {
+      return uiLang;
+    },
+    get locale() {
+      return localeForLanguage(uiLang);
+    },
+    setLanguage,
+    LANGUAGES,
+    LANGUAGE_NAMES,
     setInitialDoc,
     showToast,
     exportDocument,

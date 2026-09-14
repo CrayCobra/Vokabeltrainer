@@ -132,6 +132,75 @@ Zelle (für Screenreader unabhängig von der optischen Größe) und zusätzlich 
 in der Detailzeile nach Fokus oder Klick; die Bedienung ist damit nicht an das Treffen der
 kleinen Fläche gebunden.
 
+## Inkrement 5 – automatisiert abgedeckt
+
+Sämtliche Texte liegen in `src/js/i18n-de.js` (Grundsprache, entspricht wortgleich dem vorher
+fest im Code stehenden Text), `i18n-en.js`, `i18n-es.js`, `i18n-fr.js` und `i18n-la.js`, alle
+über denselben Schlüsselsatz. `src/js/i18n.js` übersetzt (`translate(lang, key, params)`,
+Rückfall auf Deutsch, dann auf den nackten Schlüssel), `src/js/uilang.js` verwaltet die Wahl in
+`localStorage` (Kleinigkeit im Sinne von CLAUDE.md, nicht im `.vok.json`) mit Browsersprache als
+Vorschlag beim Erststart. `model.js`-Fehler tragen jetzt `i18nKey`/`i18nParams` (`ValidationError`)
+statt fertigen deutschen Texts, `testgoal.js`s Fortschritts-/Zielbeschreibungen ebenso – beide
+Module bleiben damit ohne Sprachzugriff, wie es die Modultrennung in CLAUDE.md vorsieht
+(„Module für Datenmodell … und Übersetzungen“). `views.js` selbst enthält keinen sichtbaren
+Text mehr als Literal, jede Ausgabe läuft über `ctx.t(schlüssel, parameter)`.
+
+| Datei | Prüft |
+|---|---|
+| `test/i18n.test.mjs` | **Abnahmekriterium „alle fünf Sprachen vollständig“**: identische Schlüsselmenge in allen fünf Wörterbüchern, kein leerer/undefinierter Eintrag; `translate()` (Interpolation, fehlender Platzhalter bleibt sichtbar, Funktionsschlüssel für Pluralregeln, Rückfall auf Deutsch bei unbekannter Sprache, unbekannter Schlüssel liefert sich selbst statt zu crashen); Pluralfunktionen aller fünf Sprachen unterscheiden 1 von "mehreren" |
+| `test/uilang.test.mjs` | Spracherkennung aus der Browsersprache, gespeicherte Wahl hat Vorrang, ungültige gespeicherte Werte werden verworfen |
+| `test/no-hardcoded-text.test.mjs` | **Abnahmekriterium „kein sichtbarer Text mehr fest im Code“**: eine Liste vormals fest codierter deutscher UI-Sätze darf in `views.js`, `app.js`, `model.js`, `fileio.js`, `testgoal.js` und `index.html` nicht mehr auftauchen (Kommentare ausgenommen, die bleiben bewusst Deutsch); `views.js` muss deutlich über 100 `t(...)`-Aufrufe enthalten |
+| `test/model.test.mjs`, `test/fileio.test.mjs` | `ValidationError` trägt den erwarteten `i18nKey`/`i18nParams` statt eines fertigen Satzes |
+| `test/testgoal.test.mjs` | `describeGoalProgress`/`describeGoalLabel` liefern Schlüssel + Parameter; Rundreise-Prüfung, dass `translate('de', …)` bzw. `translate('en', …)` daraus wieder den erwarteten Satz ergibt |
+
+Per Chrome DevTools Protocol gegen `dist/app.html` gefahren: Stapel anlegen und Karten in
+Deutsch anlegen (Singular-Toast „1 Karte gelöscht.“ geprüft), auf Englisch umschalten
+(Navigationsbeschriftungen, Plural-Toast „2 cards deleted.“), auf Spanisch, Französisch und
+Latein umschalten (Navigationsbeschriftungen, Leerzustand-Text, `document.documentElement.lang`),
+`localStorage` und `profile.uiLang` nach dem Umschalten geprüft, und ein echtes Neuladen der
+Seite zeigt weiterhin die zuletzt gewählte Sprache (Latein). Makronen wurden dabei sichtbar
+korrekt dargestellt (Screenshot geprüft).
+
+Dabei zeigten sich drei echte, zusammenhängende Bugs – alle dieselbe Ursachenklasse wie das
+`testgoal.js`-Problem aus Inkrement 3: der eigene Regex-„Bundler“ verlässt sich darauf, dass
+nach dem Entfernen einer `import`-Zeile der importierte Name unverändert als gemeinsame
+Top-Level-Bindung existiert, was bei mehreren, unabhängig voneinander plausiblen Mustern nicht
+zutrifft.
+
+1. Alle fünf `i18n-*.js`-Dateien exportierten ursprünglich `dict`; nach dem Bündeln gab es fünf
+   `const dict`-Deklarationen in derselben Ebene – ein echter `SyntaxError`
+   („already been declared“), von `test/build.test.mjs`s `vm.Script`-Prüfung sofort gefangen.
+   Behoben durch eindeutige Namen (`dictDe`, `dictEn`, …).
+2. Dieselben fünf Dateien definierten je eine eigene, nicht exportierte Hilfsfunktion
+   `cardWord(n)` für die Pluralregel. Eine `function`-Redeklaration ist in JavaScript – anders
+   als bei `const`/`let` – **kein** Fehler, sondern gültig: die zuletzt geladene Definition
+   gewinnt still. Ergebnis: alle Pluralformen in allen fünf Sprachen hätten die lateinische
+   Form genutzt, ohne dass irgendein Syntaxfehler oder ein `node:test` (die echten, isolierten
+   ES-Module prüfen) das bemerkt hätte – nur ein Test gegen das tatsächliche Bündelverhalten
+   deckt so etwas auf. Ebenso kollidierte `STORAGE_KEY` zwischen `theme.js` und `uilang.js`.
+   Behoben durch eindeutige Namen und eine neue Prüfung `assertNoDuplicateTopLevelNames()` in
+   `build.mjs`, die vor jedem Bauen alle Top-Level-Bezeichner alle Dateien vergleicht und bei
+   Kollision (ob als Syntaxfehler erkennbar oder nicht) abbricht.
+3. `i18n.js` importierte umbenennend (`import { dictDe as de }`); die Zeile wurde beim Bündeln
+   vollständig entfernt, ohne die Umbenennung im restlichen Code nachzuziehen – zur Laufzeit im
+   Browser `ReferenceError: de is not defined`, unmittelbar sichtbar als komplett leere Seite,
+   aber ebenfalls nicht durch `vm.Script` (das nur Syntax prüft) oder `node:test` gefangen.
+   Behoben durch Umimportieren ohne `as` und eine neue Prüfung in `validateModuleGraph()`, die
+   `import … as …`-Zeilen von vornherein ablehnt.
+
+Für Fall 2 und 3 reichte die statische Bündel-Prüfung nicht aus, da beides gültiges bzw. nur zur
+Laufzeit fehlerhaftes JavaScript ergibt; erst der Chrome-DevTools-Protocol-Lauf gegen die
+tatsächlich gebaute Datei hat sie sichtbar gemacht. Das bestätigt den mehrschichtigen Ansatz
+dieses Testplans: `node:test` prüft die fachliche Logik an echten ES-Modulen, `build.mjs`s
+eigene Prüfungen plus `test/build.test.mjs` prüfen das Bündeln selbst, und der DevTools-Lauf
+prüft, dass die tatsächlich ausgelieferte Datei im Browser auch tut, was sie soll.
+
+**Zur Abstimmung, nicht endgültig gesetzt:** Das lateinische Kernglossar für rund 30 Begriffe
+ohne eingeführte moderne Entsprechung (Sessiō, Capsa, Seriēs, Venia Septimānālis, Probātiō u. a.)
+ist ein Vorschlag – siehe die Zusammenfassung im Gespräch für die vollständige Liste mit
+Begründung. Rückmeldung dazu fließt als gezielte Änderung an `i18n-la.js` ein, ohne die
+Infrastruktur erneut anzufassen.
+
 Die Ansichten enthalten DOM-Code und werden absichtlich nicht mit einer zusätzlichen
 Browser-Simulationsbibliothek automatisiert getestet, um keine externe Abhängigkeit
 einzuführen. Vor jeder Veröffentlichung sollte die DevTools-Protocol-Prüfung wiederholt werden,
@@ -176,21 +245,19 @@ Nicht automatisierbar ohne echten Browser bzw. echtes Gerät:
 - Heatmap auf einem echten Touchgerät: kleine Felder lassen sich trotzdem treffen, Zoomen auf
   200% bleibt bedienbar, Scrollen funktioniert per Wischgeste zusätzlich zur Tastatur.
 - Farbstufen der Heatmap mit einem Rot-Grün-Schwäche-Simulator gegenprüfen.
+- Jede der fünf Sprachen einmal vollständig durchklicken (Erfassung, Lernen, Testen, Import,
+  Statistik) und auf Textumbrüche/abgeschnittene Beschriftungen achten – längere Übersetzungen
+  (Französisch, Spanisch) können enger bemessene Flächen sprengen.
+- Lateinisches Glossar mit einer fachkundigen Person durchsprechen, sobald die Rückmeldung aus
+  der Abstimmung vorliegt.
+- Eingabe lateinischer Sonderzeichen (Makronen) in Karteninhalte prüfen, nicht nur deren Anzeige
+  in der Oberfläche.
 
-## Testpläne für Inkremente 5–6
+## Testplan für Inkrement 6
 
-Diese Inkremente existieren noch nicht; die folgenden Punkte legen fest, was jeweils mit
-automatisierten `node --test`-Regressionstests abgedeckt wird, sobald die Funktion gebaut ist.
-Grundlage sind die Abnahmekriterien aus CLAUDE.md und die Regeln aus
-`vokabel-app-entwurf.md`.
-
-### Inkrement 5 – Mehrsprachigkeit
-
-- Vollständigkeitstest: jeder Schlüssel der Referenzsprache (Deutsch) existiert in allen fünf
-  Sprachen und umgekehrt (keine verwaisten Schlüssel).
-- Kein sichtbarer Text mehr als Literal im Code (Grep-Regression gegen `src/js/views.js`).
-- Umschaltung wirkt sofort ohne Neuladen; Oberflächensprache ist unabhängig von den
-  Stapelsprachen.
+Inkrement 6 existiert noch nicht; die folgenden Punkte legen fest, was mit automatisierten
+`node --test`-Regressionstests abgedeckt wird, sobald die Funktion gebaut ist. Grundlage sind
+die Abnahmekriterien aus CLAUDE.md und die Regeln aus `vokabel-app-entwurf.md`.
 
 ### Inkrement 6 – Auslieferung als zwei Artefakte
 

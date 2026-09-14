@@ -1,7 +1,9 @@
 // Ansichten: reine DOM-Bau- und Ereignis-Verdrahtungsfunktionen. Jede render*-Funktion
 // erhält einen Container und einen App-Kontext (ctx) mit Zugriff auf Dokument, Speicherung,
-// Navigation und Meldungen. Um Fokusverlust beim Tippen zu vermeiden, wird bei Sucht-/Live-
-// Vorschaufeldern nur ein Teilbaum aktualisiert statt der ganzen Ansicht.
+// Navigation, Meldungen und Übersetzung (ctx.t). Um Fokusverlust beim Tippen zu vermeiden,
+// wird bei Sucht-/Live-Vorschaufeldern nur ein Teilbaum aktualisiert statt der ganzen Ansicht.
+// Kein sichtbarer Text steht hier als Literal – alles läuft über ctx.t(schlüssel, parameter)
+// und die Wörterbücher in i18n-*.js (siehe CLAUDE.md: eigenes Modul für Übersetzungen).
 
 import { el, clear } from './dom.js';
 import { icons } from './icons.js';
@@ -38,29 +40,44 @@ function debounce(fn, wait) {
   };
 }
 
-// ---------- Erststart / Leerzustand ----------
+// err.i18nKey stammt aus model.js/fileio.js (ValidationError); ein Fallback auf err.message
+// deckt den unwahrscheinlichen Fall eines nicht übersetzten Fehlers ab.
+function describeError(ctx, err) {
+  return err && err.i18nKey ? ctx.t(err.i18nKey, err.i18nParams) : err.message;
+}
+
+// ---------- First run / empty state ----------
 
 export function renderOnboarding(root, ctx) {
   clear(root);
+  const t = ctx.t;
 
   const banner =
     ctx.emptyReason === 'storage-cleared'
       ? el('div', { class: 'banner banner-warning', role: 'alert' }, [
           icons.warning(),
           el('div', {}, [
-            el('p', { class: 'banner-title' }, 'Der gespeicherte Stand wurde vom Browser entfernt.'),
-            el(
-              'p',
-              {},
-              'Das kann passieren, wenn der Speicher lange nicht genutzt oder vom System geräumt wurde. Lade unten eine Sicherungsdatei, um weiterzumachen, oder leg einen neuen Stapel an.'
-            ),
+            el('p', { class: 'banner-title' }, t('onboarding.clearedTitle')),
+            el('p', {}, t('onboarding.clearedBody')),
           ]),
         ])
       : null;
 
   const nameInput = el('input', { id: 'ob-deck-name', type: 'text', required: true, autocomplete: 'off' });
-  const langAInput = el('input', { id: 'ob-lang-a', type: 'text', required: true, autocomplete: 'off', value: 'Deutsch' });
-  const langBInput = el('input', { id: 'ob-lang-b', type: 'text', required: true, autocomplete: 'off', value: 'Englisch' });
+  const langAInput = el('input', {
+    id: 'ob-lang-a',
+    type: 'text',
+    required: true,
+    autocomplete: 'off',
+    value: t('onboarding.defaultLangA'),
+  });
+  const langBInput = el('input', {
+    id: 'ob-lang-b',
+    type: 'text',
+    required: true,
+    autocomplete: 'off',
+    value: t('onboarding.defaultLangB'),
+  });
   const profileInput = el('input', { id: 'ob-profile', type: 'text', autocomplete: 'off' });
   const errorBox = el('p', { class: 'field-error', hidden: true, role: 'alert' });
 
@@ -78,21 +95,22 @@ export function renderOnboarding(root, ctx) {
             langB: langBInput.value,
             profileName: profileInput.value,
             appVersion: ctx.APP_VERSION,
+            uiLang: ctx.lang,
           });
           await ctx.setInitialDoc(doc);
         } catch (err) {
-          errorBox.textContent = err.message;
+          errorBox.textContent = describeError(ctx, err);
           errorBox.hidden = false;
         }
       },
     },
     [
-      el('div', { class: 'field' }, [el('label', { for: 'ob-deck-name' }, 'Name des Stapels'), nameInput]),
-      el('div', { class: 'field' }, [el('label', { for: 'ob-lang-a' }, 'Sprache A'), langAInput]),
-      el('div', { class: 'field' }, [el('label', { for: 'ob-lang-b' }, 'Sprache B'), langBInput]),
-      el('div', { class: 'field' }, [el('label', { for: 'ob-profile' }, 'Profilname (optional)'), profileInput]),
+      el('div', { class: 'field' }, [el('label', { for: 'ob-deck-name' }, t('onboarding.deckNameLabel')), nameInput]),
+      el('div', { class: 'field' }, [el('label', { for: 'ob-lang-a' }, t('onboarding.langALabel')), langAInput]),
+      el('div', { class: 'field' }, [el('label', { for: 'ob-lang-b' }, t('onboarding.langBLabel')), langBInput]),
+      el('div', { class: 'field' }, [el('label', { for: 'ob-profile' }, t('onboarding.profileLabel')), profileInput]),
       errorBox,
-      el('button', { type: 'submit', class: 'btn btn-primary' }, 'Stapel anlegen'),
+      el('button', { type: 'submit', class: 'btn btn-primary' }, t('onboarding.createButton')),
     ]
   );
 
@@ -108,7 +126,7 @@ export function renderOnboarding(root, ctx) {
         const doc = parseImportedText(text);
         await ctx.setInitialDoc(doc);
       } catch (err) {
-        errorBox.textContent = err.message;
+        errorBox.textContent = describeError(ctx, err);
         errorBox.hidden = false;
       }
     },
@@ -116,17 +134,20 @@ export function renderOnboarding(root, ctx) {
 
   const backupLabel = el('label', { for: 'ob-backup-file', class: 'btn btn-secondary file-btn' }, [
     icons.upload(),
-    el('span', {}, 'Sicherungsdatei laden'),
+    el('span', {}, t('onboarding.loadBackupButton')),
   ]);
 
   root.append(
     el('main', { class: 'onboarding', id: 'main' }, [
-      el('h1', {}, 'Vokabeltrainer'),
+      el('h1', {}, t('app.title')),
       banner,
-      el('section', { 'aria-labelledby': 'ob-new-heading' }, [el('h2', { id: 'ob-new-heading' }, 'Neuen Stapel anlegen'), form]),
+      el('section', { 'aria-labelledby': 'ob-new-heading' }, [
+        el('h2', { id: 'ob-new-heading' }, t('onboarding.newDeckHeading')),
+        form,
+      ]),
       el('section', { 'aria-labelledby': 'ob-restore-heading' }, [
-        el('h2', { id: 'ob-restore-heading' }, 'Vorhandenen Stand laden'),
-        el('p', {}, 'Eine zuvor gesicherte .vok.json-Datei lädt den kompletten Stapel samt Lernstand.'),
+        el('h2', { id: 'ob-restore-heading' }, t('onboarding.restoreHeading')),
+        el('p', {}, t('onboarding.restoreBody')),
         backupLabel,
         el('div', { class: 'visually-hidden' }, [backupInput]),
       ]),
@@ -134,21 +155,22 @@ export function renderOnboarding(root, ctx) {
   );
 }
 
-// ---------- Anwendungsrahmen ----------
+// ---------- App shell ----------
 
 export function renderShell(root, ctx) {
   clear(root);
+  const t = ctx.t;
 
   const nav = el(
     'nav',
-    { class: 'main-nav', 'aria-label': 'Bereiche' },
+    { class: 'main-nav', 'aria-label': t('nav.areasLabel') },
     [
-      { view: 'lernen', label: 'Lernen' },
-      { view: 'testen', label: 'Testen' },
-      { view: 'karten', label: 'Karten' },
-      { view: 'erfassen', label: 'Erfassen' },
-      { view: 'import', label: 'Import' },
-      { view: 'statistik', label: 'Statistik' },
+      { view: 'lernen', label: t('nav.learn') },
+      { view: 'testen', label: t('nav.test') },
+      { view: 'karten', label: t('nav.cards') },
+      { view: 'erfassen', label: t('nav.capture') },
+      { view: 'import', label: t('nav.import') },
+      { view: 'statistik', label: t('nav.stats') },
     ].map(({ view, label }) =>
       el(
         'a',
@@ -163,8 +185,8 @@ export function renderShell(root, ctx) {
   );
 
   const lastBackup = ctx.doc.meta.lastBackup
-    ? new Date(ctx.doc.meta.lastBackup).toLocaleString('de-DE')
-    : 'noch nie';
+    ? new Date(ctx.doc.meta.lastBackup).toLocaleString(ctx.locale)
+    : t('header.lastBackupNever');
 
   const header = el('header', { class: 'app-header' }, [
     el('div', { class: 'app-header-top' }, [
@@ -173,7 +195,7 @@ export function renderShell(root, ctx) {
     ]),
     nav,
     el('div', { class: 'app-header-actions' }, [
-      el('span', { class: 'save-status' }, `Zuletzt gesichert: ${lastBackup}`),
+      el('span', { class: 'save-status' }, t('header.lastBackup', { date: lastBackup })),
       el(
         'button',
         {
@@ -181,14 +203,14 @@ export function renderShell(root, ctx) {
           class: 'btn btn-primary',
           onclick: () => ctx.exportDocument(),
         },
-        [icons.download(), el('span', {}, 'Sichern')]
+        [icons.download(), el('span', {}, t('header.save'))]
       ),
       el(
         'button',
         {
           type: 'button',
           class: 'icon-btn',
-          'aria-label': 'Einstellungen',
+          'aria-label': t('nav.settingsLabel'),
           onclick: () => ctx.navigate('einstellungen'),
         },
         [icons.settings()]
@@ -208,36 +230,47 @@ export function renderShell(root, ctx) {
   else renderLearnView(main, ctx);
 }
 
-// ---------- Einstellungen ----------
-// Geräte-/Profilweite Voreinstellungen, unabhängig vom Stapel. Hier soll später auch die
-// Wahl der Oberflächensprache (Inkrement 5) hinzukommen.
+// ---------- Settings ----------
+// Geräte-/Profilweite Voreinstellungen, unabhängig vom Stapel: Erscheinungsbild und
+// Oberflächensprache.
 
 function renderSettingsView(container, ctx) {
-  const current = ctx.themePreference;
+  const t = ctx.t;
+  const currentTheme = ctx.themePreference;
   const themeField = el('fieldset', {}, [
-    el('legend', {}, 'Erscheinungsbild'),
-    radioOption('theme', 'system', 'Systemeinstellung folgen', current === 'system'),
-    radioOption('theme', 'light', 'Hell', current === 'light'),
-    radioOption('theme', 'dark', 'Dunkel', current === 'dark'),
+    el('legend', {}, t('settings.appearanceLegend')),
+    radioOption('theme', 'system', t('settings.themeSystem'), currentTheme === 'system'),
+    radioOption('theme', 'light', t('settings.themeLight'), currentTheme === 'light'),
+    radioOption('theme', 'dark', t('settings.themeDark'), currentTheme === 'dark'),
   ]);
   themeField.addEventListener('change', (e) => ctx.setThemePreference(e.target.value));
 
+  const languageField = el(
+    'fieldset',
+    {},
+    [el('legend', {}, t('settings.languageLegend'))].concat(
+      ctx.LANGUAGES.map((code) => radioOption('ui-language', code, ctx.LANGUAGE_NAMES[code], code === ctx.lang))
+    )
+  );
+  languageField.addEventListener('change', (e) => ctx.setLanguage(e.target.value));
+
   container.append(
     el('section', { 'aria-labelledby': 'settings-heading' }, [
-      el('h2', { id: 'settings-heading' }, 'Einstellungen'),
+      el('h2', { id: 'settings-heading' }, t('settings.heading')),
       themeField,
+      languageField,
     ])
   );
 }
 
-// ---------- Statistik ----------
+// ---------- Stats ----------
 
 const HEATMAP_WEEKS = 26; // Immer alle 26 Wochen bauen; app.css blendet auf schmalen
 // Bildschirmen die ältesten 14 aus, sodass dort nur die jüngsten 12 sichtbar bleiben.
 const HEATMAP_NARROW_WEEKS = 12;
 
-function formatDateDe(isoDate) {
-  return new Date(`${isoDate}T00:00:00`).toLocaleDateString('de-DE', {
+function formatDate(ctx, isoDate) {
+  return new Date(`${isoDate}T00:00:00`).toLocaleDateString(ctx.locale, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -245,46 +278,48 @@ function formatDateDe(isoDate) {
 }
 
 function renderStatsView(container, ctx) {
+  const t = ctx.t;
   const doc = ctx.doc;
   const currentStreak = computeCurrentStreak(doc.days);
   const longestStreak = computeLongestStreak(doc.days);
   const jokerAvailable = isCurrentWeekJokerAvailable(doc.days);
 
   const streakSection = el('section', { 'aria-labelledby': 'streak-heading' }, [
-    el('h2', { id: 'streak-heading' }, 'Lernserie'),
+    el('h2', { id: 'streak-heading' }, t('stats.streakHeading')),
     el('div', { class: 'streak-stats' }, [
       el('div', { class: 'streak-stat' }, [
         el('p', { class: 'streak-number' }, String(currentStreak)),
-        el('p', { class: 'hint' }, currentStreak === 1 ? 'Tag in Folge' : 'Tage in Folge'),
+        el('p', { class: 'hint' }, t('stats.streakDays', { n: currentStreak })),
       ]),
       el('div', { class: 'streak-stat' }, [
         el('p', { class: 'streak-number' }, String(longestStreak)),
-        el('p', { class: 'hint' }, 'längste Serie'),
+        el('p', { class: 'hint' }, t('stats.longestStreak')),
       ]),
     ]),
     el(
       'span',
       { class: jokerAvailable ? 'badge badge-goal-reached' : 'badge' },
-      jokerAvailable ? 'Wochenjoker verfügbar' : 'Wochenjoker verbraucht'
+      jokerAvailable ? t('stats.jokerAvailable') : t('stats.jokerUsed')
     ),
   ]);
 
-  const heatmapSection = renderHeatmapSection(doc);
-  const boxSection = renderBoxDistributionSection(doc);
+  const heatmapSection = renderHeatmapSection(ctx, doc);
+  const boxSection = renderBoxDistributionSection(ctx, doc);
 
-  container.append(
-    el('div', { class: 'stats-view' }, [streakSection, heatmapSection, boxSection])
-  );
+  container.append(el('div', { class: 'stats-view' }, [streakSection, heatmapSection, boxSection]));
 }
 
-function renderHeatmapSection(doc) {
+function renderHeatmapSection(ctx, doc) {
+  const t = ctx.t;
   const weeks = buildHeatmapWeeks(doc.days, HEATMAP_WEEKS);
-  const detail = el('p', { class: 'heatmap-detail', 'aria-live': 'polite' }, 'Ein Feld antippen für Details.');
+  const detail = el('p', { class: 'heatmap-detail', 'aria-live': 'polite' }, t('stats.heatmapHint'));
 
   const dayLabels = el(
     'div',
     { class: 'heatmap-day-labels' },
-    ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((label) => el('span', {}, label))
+    ['weekdayMon', 'weekdayTue', 'weekdayWed', 'weekdayThu', 'weekdayFri', 'weekdaySat', 'weekdaySun'].map((key) =>
+      el('span', {}, t(`stats.${key}`))
+    )
   );
 
   const weekColumns = weeks.map((week, weekIndex) => {
@@ -293,17 +328,17 @@ function renderHeatmapSection(doc) {
       if (cell.future) {
         return el('span', { class: 'heatmap-cell heatmap-future', 'aria-hidden': 'true' });
       }
+      const label = t('stats.heatmapCellDetail', { date: formatDate(ctx, cell.date), correct: cell.correct, wrong: cell.wrong });
       const btn = el('button', {
         type: 'button',
         class: `heatmap-cell heatmap-level-${cell.level}`,
-        'aria-label': `${formatDateDe(cell.date)}: ${cell.correct} richtig, ${cell.wrong} falsch`,
+        'aria-label': label,
       });
-      const text = `${formatDateDe(cell.date)}: ${cell.correct} richtig, ${cell.wrong} falsch.`;
       btn.addEventListener('focus', () => {
-        detail.textContent = text;
+        detail.textContent = label;
       });
       btn.addEventListener('click', () => {
-        detail.textContent = text;
+        detail.textContent = label;
       });
       return btn;
     });
@@ -311,20 +346,21 @@ function renderHeatmapSection(doc) {
   });
 
   const legend = el('div', { class: 'heatmap-legend' }, [
-    el('span', { class: 'hint' }, 'Weniger'),
+    el('span', { class: 'hint' }, t('stats.legendLess')),
     ...[0, 1, 2, 3, 4].map((level) => el('span', { class: `heatmap-cell heatmap-level-${level}`, 'aria-hidden': 'true' })),
-    el('span', { class: 'hint' }, 'Mehr'),
+    el('span', { class: 'hint' }, t('stats.legendMore')),
   ]);
 
   return el('section', { 'aria-labelledby': 'heatmap-heading' }, [
-    el('h2', { id: 'heatmap-heading' }, 'Heatmap'),
+    el('h2', { id: 'heatmap-heading' }, t('stats.heatmapHeading')),
     el('div', { class: 'heatmap-scroll' }, [el('div', { class: 'heatmap-grid' }, [dayLabels, ...weekColumns])]),
     legend,
     detail,
   ]);
 }
 
-function renderBoxDistributionSection(doc) {
+function renderBoxDistributionSection(ctx, doc) {
+  const t = ctx.t;
   const dist = boxDistribution(doc.cards);
   const maxCount = Math.max(1, ...Object.values(dist.counts));
 
@@ -332,22 +368,23 @@ function renderBoxDistributionSection(doc) {
     const count = dist.counts[box];
     const pct = Math.round((count / maxCount) * 100);
     return el('div', { class: 'box-bar-row' }, [
-      el('span', { class: 'box-bar-label' }, `Kasten ${box}`),
+      el('span', { class: 'box-bar-label' }, t('stats.boxLabel', { n: box })),
       el('div', { class: 'box-bar-track' }, [el('div', { class: 'box-bar-fill', style: `width: ${pct}%` })]),
       el('span', { class: 'box-bar-count' }, String(count)),
     ]);
   });
 
   return el('section', { 'aria-labelledby': 'boxdist-heading' }, [
-    el('h2', { id: 'boxdist-heading' }, 'Kastenverteilung'),
+    el('h2', { id: 'boxdist-heading' }, t('stats.boxHeading')),
     el('div', { class: 'box-bars' }, bars),
-    el('p', {}, `${dist.total} Karte${dist.total === 1 ? '' : 'n'} insgesamt, davon ${dist.repair} in der Reparaturkiste.`),
+    el('p', {}, t('stats.totals', { total: dist.total, repair: dist.repair })),
   ]);
 }
 
-// ---------- Kartenliste ----------
+// ---------- Card list ----------
 
 export function renderCardsView(container, ctx) {
+  const t = ctx.t;
   const session = ctx.state.cardsSession;
 
   const searchField = el('div', { class: 'search-field' }, [
@@ -355,9 +392,9 @@ export function renderCardsView(container, ctx) {
     el('input', {
       id: 'card-search',
       type: 'search',
-      placeholder: 'Suchen…',
+      placeholder: t('cards.searchPlaceholder'),
       value: session.search,
-      'aria-label': 'Karten durchsuchen',
+      'aria-label': t('cards.searchLabel'),
       oninput: debounce((e) => {
         session.search = e.target.value;
         renderRows();
@@ -368,16 +405,16 @@ export function renderCardsView(container, ctx) {
   const boxSelect = el(
     'select',
     {
-      'aria-label': 'Nach Kasten filtern',
+      'aria-label': t('cards.filterBoxLabel'),
       onchange: (e) => {
         session.filterBox = e.target.value;
         renderRows();
       },
     },
     [
-      el('option', { value: '' }, 'Alle Kästen'),
+      el('option', { value: '' }, t('cards.filterBoxAll')),
       ...[1, 2, 3, 4, 5].map((n) =>
-        el('option', { value: String(n), selected: session.filterBox === String(n) }, `Kasten ${n}`)
+        el('option', { value: String(n), selected: session.filterBox === String(n) }, t('cards.filterBoxN', { n }))
       ),
     ]
   );
@@ -385,38 +422,38 @@ export function renderCardsView(container, ctx) {
   const repairSelect = el(
     'select',
     {
-      'aria-label': 'Nach Reparaturkiste filtern',
+      'aria-label': t('cards.filterRepairLabel'),
       onchange: (e) => {
         session.filterRepair = e.target.value;
         renderRows();
       },
     },
     [
-      el('option', { value: '' }, 'Alle Karten'),
-      el('option', { value: 'yes' }, 'Nur Reparaturkiste'),
-      el('option', { value: 'no' }, 'Ohne Reparaturkiste'),
+      el('option', { value: '' }, t('cards.filterAll')),
+      el('option', { value: 'yes' }, t('cards.filterRepairOnly')),
+      el('option', { value: 'no' }, t('cards.filterRepairNone')),
     ]
   );
 
   const markedSelect = el(
     'select',
     {
-      'aria-label': 'Nach Markierung filtern',
+      'aria-label': t('cards.filterMarkedLabel'),
       onchange: (e) => {
         session.filterMarked = e.target.value;
         renderRows();
       },
     },
     [
-      el('option', { value: '' }, 'Alle Karten'),
-      el('option', { value: 'yes' }, 'Nur markierte'),
-      el('option', { value: 'no' }, 'Nur unmarkierte'),
+      el('option', { value: '' }, t('cards.filterAll')),
+      el('option', { value: 'yes' }, t('cards.filterMarkedOnly')),
+      el('option', { value: 'no' }, t('cards.filterMarkedNone')),
     ]
   );
 
   const bulkBar = el('div', { class: 'bulk-bar', hidden: true });
   const rowsContainer = el('div', { class: 'card-rows', id: 'card-rows' });
-  const heading = el('h2', { id: 'cards-heading' }, `Karten (${ctx.doc.cards.length})`);
+  const heading = el('h2', { id: 'cards-heading' }, t('cards.heading', { n: ctx.doc.cards.length }));
 
   container.append(
     el('section', { 'aria-labelledby': 'cards-heading' }, [
@@ -436,7 +473,7 @@ export function renderCardsView(container, ctx) {
     }
     bulkBar.hidden = false;
     bulkBar.append(
-      el('span', {}, `${n} ausgewählt`),
+      el('span', {}, t('cards.selectedCount', { n })),
       el(
         'button',
         {
@@ -444,7 +481,7 @@ export function renderCardsView(container, ctx) {
           class: 'btn btn-danger',
           onclick: () => doDelete([...session.selection]),
         },
-        [icons.trash(), el('span', {}, 'Löschen')]
+        [icons.trash(), el('span', {}, t('cards.delete'))]
       ),
       el(
         'button',
@@ -456,7 +493,7 @@ export function renderCardsView(container, ctx) {
             renderRows();
           },
         },
-        'Abwählen'
+        t('cards.deselect')
       )
     );
   }
@@ -480,12 +517,12 @@ export function renderCardsView(container, ctx) {
     }
     ids.forEach((id) => session.selection.delete(id));
     session.undo = { removed };
-    heading.textContent = `Karten (${ctx.doc.cards.length})`;
+    heading.textContent = t('cards.heading', { n: ctx.doc.cards.length });
     renderRows();
     updateBulkBar();
     ctx.showToast({
-      message: `${removed.length} Karte${removed.length === 1 ? '' : 'n'} gelöscht.`,
-      actionLabel: 'Rückgängig',
+      message: t('cards.deletedToast', { n: removed.length }),
+      actionLabel: t('cards.undo'),
       onAction: async () => {
         if (!session.undo) return;
         const restored = restoreCards(ctx.doc, session.undo.removed);
@@ -495,7 +532,7 @@ export function renderCardsView(container, ctx) {
           return;
         }
         session.undo = null;
-        heading.textContent = `Karten (${ctx.doc.cards.length})`;
+        heading.textContent = t('cards.heading', { n: ctx.doc.cards.length });
         renderRows();
       },
     });
@@ -504,13 +541,13 @@ export function renderCardsView(container, ctx) {
   function renderRows() {
     clear(rowsContainer);
     if (ctx.doc.cards.length === 0) {
-      rowsContainer.append(el('p', { class: 'empty-state' }, 'Noch keine Karten. Lege welche über „Erfassen“ oder „Import“ an.'));
+      rowsContainer.append(el('p', { class: 'empty-state' }, t('cards.emptyDeck')));
       updateBulkBar();
       return;
     }
     const visible = ctx.doc.cards.filter(matchesFilters);
     if (visible.length === 0) {
-      rowsContainer.append(el('p', { class: 'empty-state' }, 'Keine Karten passen zu den Filtern.'));
+      rowsContainer.append(el('p', { class: 'empty-state' }, t('cards.emptyFiltered')));
       updateBulkBar();
       return;
     }
@@ -525,7 +562,7 @@ export function renderCardsView(container, ctx) {
   function renderRow(card) {
     const checkbox = el('input', {
       type: 'checkbox',
-      'aria-label': `${card.a} auswählen`,
+      'aria-label': t('cards.selectAria', { a: card.a }),
       checked: session.selection.has(card.id),
       onchange: (e) => {
         if (e.target.checked) session.selection.add(card.id);
@@ -540,7 +577,7 @@ export function renderCardsView(container, ctx) {
         type: 'button',
         class: 'icon-btn',
         'aria-pressed': String(card.marked),
-        'aria-label': card.marked ? 'Markierung entfernen' : 'Karte markieren',
+        'aria-label': card.marked ? t('cards.unmarkAria') : t('cards.markAria'),
         onclick: async () => {
           const updated = applyCardEdit(card, { marked: !card.marked });
           try {
@@ -559,7 +596,7 @@ export function renderCardsView(container, ctx) {
       {
         type: 'button',
         class: 'icon-btn',
-        'aria-label': `${card.a} bearbeiten`,
+        'aria-label': t('cards.editAria', { a: card.a }),
         onclick: () => {
           session.editingId = card.id;
           renderRows();
@@ -573,7 +610,7 @@ export function renderCardsView(container, ctx) {
       {
         type: 'button',
         class: 'icon-btn',
-        'aria-label': `${card.a} löschen`,
+        'aria-label': t('cards.deleteAria', { a: card.a }),
         onclick: () => doDelete([card.id]),
       },
       [icons.trash()]
@@ -581,10 +618,10 @@ export function renderCardsView(container, ctx) {
 
     return el('li', { class: 'card-row' }, [
       checkbox,
-      el('span', { class: 'card-text card-text-a' }, card.a || '(leer)'),
-      el('span', { class: 'card-text card-text-b' }, card.b || '(leer)'),
-      el('span', { class: 'badge' }, `Kasten ${card.box}`),
-      card.repair ? el('span', { class: 'badge badge-repair' }, 'Reparatur') : null,
+      el('span', { class: 'card-text card-text-a' }, card.a || t('common.empty')),
+      el('span', { class: 'card-text card-text-b' }, card.b || t('common.empty')),
+      el('span', { class: 'badge' }, t('cards.boxBadge', { n: card.box })),
+      card.repair ? el('span', { class: 'badge badge-repair' }, t('cards.repairBadge')) : null,
       starBtn,
       editBtn,
       deleteBtn,
@@ -592,8 +629,8 @@ export function renderCardsView(container, ctx) {
   }
 
   function renderEditRow(card) {
-    const aInput = el('input', { type: 'text', value: card.a, 'aria-label': 'Vorderseite' });
-    const bInput = el('input', { type: 'text', value: card.b, 'aria-label': 'Rückseite' });
+    const aInput = el('input', { type: 'text', value: card.a, 'aria-label': t('cards.frontLabel') });
+    const bInput = el('input', { type: 'text', value: card.b, 'aria-label': t('cards.backLabel') });
 
     const commit = async () => {
       const updated = applyCardEdit(card, { a: aInput.value.trim(), b: bInput.value.trim() });
@@ -622,17 +659,18 @@ export function renderCardsView(container, ctx) {
     return el('li', { class: 'card-row card-row-editing' }, [
       aInput,
       bInput,
-      el('button', { type: 'button', class: 'btn btn-primary', onclick: commit }, [icons.check(), el('span', {}, 'Speichern')]),
-      el('button', { type: 'button', class: 'btn btn-secondary', onclick: cancel }, 'Abbrechen'),
+      el('button', { type: 'button', class: 'btn btn-primary', onclick: commit }, [icons.check(), el('span', {}, t('common.save'))]),
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: cancel }, t('common.cancel')),
     ]);
   }
 
   renderRows();
 }
 
-// ---------- Schnellerfassung ----------
+// ---------- Quick capture ----------
 
 export function renderCaptureView(container, ctx) {
+  const t = ctx.t;
   const textarea = el('textarea', {
     id: 'capture-text',
     rows: '14',
@@ -645,16 +683,16 @@ export function renderCaptureView(container, ctx) {
     const { cards, warnings } = parseQuickCapture(textarea.value);
     clear(summary);
     clear(list);
-    summary.append(el('p', {}, `${cards.length} Karte${cards.length === 1 ? '' : 'n'} werden angelegt.`));
+    summary.append(el('p', {}, t('capture.summary', { n: cards.length })));
     for (const c of cards.slice(0, 50)) {
-      list.append(el('li', { class: 'preview-item' }, `${c.a} → ${c.b || '(leer)'}`));
+      list.append(el('li', { class: 'preview-item' }, t('capture.previewArrow', { a: c.a, b: c.b || t('common.empty') })));
     }
-    if (cards.length > 50) list.append(el('li', { class: 'preview-item' }, `… und ${cards.length - 50} weitere`));
+    if (cards.length > 50) list.append(el('li', { class: 'preview-item' }, t('capture.previewMore', { n: cards.length - 50 })));
     for (const w of warnings) {
       list.append(
         el('li', { class: 'preview-item preview-warning' }, [
           icons.warning(),
-          el('span', {}, `Zeile ${w.line}: „${w.text}“ – Rückseite fehlt, wird nicht übernommen.`),
+          el('span', {}, t('capture.warningLine', { line: w.line, text: w.text })),
         ])
       );
     }
@@ -669,7 +707,7 @@ export function renderCaptureView(container, ctx) {
       onclick: async () => {
         const { cards, warnings } = parseQuickCapture(textarea.value);
         if (cards.length === 0) {
-          ctx.showToast({ message: 'Keine vollständigen Karten gefunden.' });
+          ctx.showToast({ message: t('capture.noneFound') });
           return;
         }
         const newCards = cards.map((c) => createCard(c));
@@ -680,12 +718,12 @@ export function renderCaptureView(container, ctx) {
         }
         textarea.value = '';
         updatePreview();
-        const note = warnings.length ? ` ${warnings.length} unvollständige Zeile(n) wurden nicht übernommen.` : '';
-        ctx.showToast({ message: `${newCards.length} Karte${newCards.length === 1 ? '' : 'n'} angelegt.${note}` });
+        const note = warnings.length ? t('capture.incompleteNote', { n: warnings.length }) : '';
+        ctx.showToast({ message: t('capture.createdToast', { n: newCards.length, note }) });
         ctx.refreshHeaderCount();
       },
     },
-    'Karten übernehmen'
+    t('capture.commit')
   );
 
   const clearBtn = el(
@@ -698,17 +736,13 @@ export function renderCaptureView(container, ctx) {
         updatePreview();
       },
     },
-    'Textfeld leeren'
+    t('capture.clear')
   );
 
   container.append(
     el('section', { 'aria-labelledby': 'capture-heading' }, [
-      el('h2', { id: 'capture-heading' }, 'Schnellerfassung'),
-      el(
-        'p',
-        { id: 'capture-hint', class: 'hint' },
-        'Eine Zeile Vorderseite, nächste Zeile Rückseite, abwechselnd. Leere Zeilen trennen nur optisch. Enthält eine Zeile einen Tabulator, bildet sie allein eine Karte (Vorderseite Tab Rückseite).'
-      ),
+      el('h2', { id: 'capture-heading' }, t('capture.heading')),
+      el('p', { id: 'capture-hint', class: 'hint' }, t('capture.hint')),
       el('div', { class: 'capture-layout' }, [
         el('div', { class: 'capture-input' }, [textarea]),
         el('div', { class: 'capture-preview' }, [summary, list]),
@@ -720,7 +754,7 @@ export function renderCaptureView(container, ctx) {
   updatePreview();
 }
 
-// ---------- Lernen ----------
+// ---------- Learn ----------
 
 export function renderLearnView(container, ctx) {
   const ls = ctx.state.learnSession;
@@ -731,15 +765,16 @@ export function renderLearnView(container, ctx) {
 
 // Gemeinsame Felder für Richtung, Reihenfolge und den Markierungsfilter, genutzt von
 // Lern- und Testsitzungs-Einrichtung. idPrefix hält die Radio-IDs beider Ansichten auseinander.
-function buildSessionOptionFields(deck, idPrefix, onChange) {
+function buildSessionOptionFields(ctx, deck, idPrefix, onChange) {
+  const t = ctx.t;
   let direction = 'ab';
   let order = 'random';
   let onlyMarked = false;
 
   const directionField = el('fieldset', {}, [
-    el('legend', {}, 'Richtung'),
-    radioOption(`${idPrefix}-direction`, 'ab', `${deck.langA} → ${deck.langB}`, true),
-    radioOption(`${idPrefix}-direction`, 'ba', `${deck.langB} → ${deck.langA}`, false),
+    el('legend', {}, t('session.directionLegend')),
+    radioOption(`${idPrefix}-direction`, 'ab', t('session.directionOption', { a: deck.langA, b: deck.langB }), true),
+    radioOption(`${idPrefix}-direction`, 'ba', t('session.directionOption', { a: deck.langB, b: deck.langA }), false),
   ]);
   directionField.addEventListener('change', (e) => {
     direction = e.target.value;
@@ -747,10 +782,10 @@ function buildSessionOptionFields(deck, idPrefix, onChange) {
   });
 
   const orderField = el('fieldset', {}, [
-    el('legend', {}, 'Reihenfolge'),
-    radioOption(`${idPrefix}-order`, 'random', 'Zufällig', true),
-    radioOption(`${idPrefix}-order`, 'sequential', 'Eingabereihenfolge', false),
-    radioOption(`${idPrefix}-order`, 'box', 'Nach Kästen (aufsteigend)', false),
+    el('legend', {}, t('session.orderLegend')),
+    radioOption(`${idPrefix}-order`, 'random', t('session.orderRandom'), true),
+    radioOption(`${idPrefix}-order`, 'sequential', t('session.orderSequential'), false),
+    radioOption(`${idPrefix}-order`, 'box', t('session.orderBox'), false),
   ]);
   orderField.addEventListener('change', (e) => {
     order = e.target.value;
@@ -762,9 +797,7 @@ function buildSessionOptionFields(deck, idPrefix, onChange) {
     onlyMarked = e.target.checked;
     onChange();
   });
-  const markedField = el('div', { class: 'field-row' }, [
-    el('label', {}, [markedCheckbox, ' Nur markierte Karten']),
-  ]);
+  const markedField = el('div', { class: 'field-row' }, [el('label', {}, [markedCheckbox, ` ${t('session.onlyMarked')}`])]);
 
   return {
     directionField,
@@ -783,24 +816,25 @@ function buildSessionOptionFields(deck, idPrefix, onChange) {
 }
 
 function renderLearnSetup(container, ctx) {
+  const t = ctx.t;
   const deck = ctx.doc.deck;
   const countText = el('p', { class: 'hint' });
-  const startBtn = el('button', { type: 'button', class: 'btn btn-primary' }, 'Sitzung starten');
+  const startBtn = el('button', { type: 'button', class: 'btn btn-primary' }, t('learn.startButton'));
 
   function updateCount() {
     const cards = fields.onlyMarked ? ctx.doc.cards.filter((c) => c.marked) : ctx.doc.cards;
     const repairCount = cards.filter((c) => c.repair).length;
     if (ctx.doc.cards.length === 0) {
-      countText.textContent = 'Noch keine Karten. Lege welche über „Erfassen“ oder „Import“ an.';
+      countText.textContent = t('cards.emptyDeck');
     } else if (cards.length === 0) {
-      countText.textContent = 'Keine markierten Karten vorhanden.';
+      countText.textContent = t('learn.emptyMarked');
     } else {
-      countText.textContent = `${cards.length} Karte${cards.length === 1 ? '' : 'n'} in dieser Sitzung, davon ${repairCount} in der Reparaturkiste.`;
+      countText.textContent = t('learn.countHint', { n: cards.length, repair: repairCount });
     }
     startBtn.disabled = cards.length === 0;
   }
 
-  const fields = buildSessionOptionFields(deck, 'learn', updateCount);
+  const fields = buildSessionOptionFields(ctx, deck, 'learn', updateCount);
 
   startBtn.addEventListener('click', () => {
     const { order, direction, onlyMarked } = fields;
@@ -812,7 +846,7 @@ function renderLearnSetup(container, ctx) {
 
   container.append(
     el('section', { 'aria-labelledby': 'learn-heading' }, [
-      el('h2', { id: 'learn-heading' }, 'Lernsitzung einrichten'),
+      el('h2', { id: 'learn-heading' }, t('learn.setupHeading')),
       fields.directionField,
       fields.orderField,
       fields.markedField,
@@ -822,14 +856,16 @@ function renderLearnSetup(container, ctx) {
   );
 }
 
-function describeRatingOutcome(prev, updated, correct) {
-  if (!correct) return 'Falsch – zurück auf Kasten 1, in der Reparaturkiste.';
-  if (prev.repair && updated.repair) return `Richtig – ${updated.streak}/4 in der Reparaturkiste.`;
-  if (prev.repair && !updated.repair) return 'Richtig – Reparaturkiste geschafft, Kasten 2.';
-  return `Richtig – Kasten ${prev.box} → ${updated.box}.`;
+function describeRatingOutcome(ctx, prev, updated, correct) {
+  const t = ctx.t;
+  if (!correct) return t('session.ratingWrong');
+  if (prev.repair && updated.repair) return t('session.ratingRepairProgress', { streak: updated.streak });
+  if (prev.repair && !updated.repair) return t('session.ratingRepairDone');
+  return t('session.ratingBoxUp', { prev: prev.box, next: updated.box });
 }
 
 async function rateCurrentCard(ctx, ls, correct) {
+  const t = ctx.t;
   const cardId = ls.currentCardId;
   const previousCard = ctx.doc.cards.find((c) => c.id === cardId);
   const updated = applyLearningResult(previousCard, correct);
@@ -840,8 +876,8 @@ async function rateCurrentCard(ctx, ls, correct) {
   if (!correct) ls.queue.requeueAfterWrong(cardId);
 
   ctx.showToast({
-    message: describeRatingOutcome(previousCard, updated, correct),
-    actionLabel: 'Korrigieren',
+    message: describeRatingOutcome(ctx, previousCard, updated, correct),
+    actionLabel: t('session.correctionAction'),
     duration: 3000,
     onAction: async () => {
       const flippedCorrect = !correct;
@@ -873,7 +909,8 @@ async function rateCurrentCard(ctx, ls, correct) {
 // Baut die Umdreh-Karte samt Bewertungsflächen: Tippen/Leertaste dreht um, danach bewerten
 // über zwei getrennte Flächen oder die Pfeiltasten. Wird von Lern- und Testsitzung geteilt,
 // da sich beide nur in Warteschlangen-Verwaltung und Rahmen (Fortschritt, Ziel) unterscheiden.
-function buildFlipCard({ card, direction, deck, onRate }) {
+function buildFlipCard(ctx, { card, direction, deck, onRate }) {
+  const t = ctx.t;
   const frontLabel = direction === 'ab' ? deck.langA : deck.langB;
   const backLabel = direction === 'ab' ? deck.langB : deck.langA;
   const frontText = direction === 'ab' ? card.a : card.b;
@@ -882,28 +919,27 @@ function buildFlipCard({ card, direction, deck, onRate }) {
   let flipped = false;
 
   const faceLabel = el('p', { class: 'learn-face-label' }, frontLabel);
-  const faceText = el('p', { class: 'learn-face-text' }, frontText || '(leer)');
-  const cardBtn = el(
-    'button',
-    { type: 'button', class: 'learn-card', 'aria-label': 'Karte umdrehen (Leertaste)' },
-    [faceLabel, faceText]
-  );
+  const faceText = el('p', { class: 'learn-face-text' }, frontText || t('common.empty'));
+  const cardBtn = el('button', { type: 'button', class: 'learn-card', 'aria-label': t('session.flipAria') }, [
+    faceLabel,
+    faceText,
+  ]);
 
   const wrongBtn = el(
     'button',
     { type: 'button', class: 'btn btn-danger learn-rate', onclick: () => onRate(false) },
-    'Falsch'
+    t('session.wrongBtn')
   );
   const rightBtn = el(
     'button',
     { type: 'button', class: 'btn btn-primary learn-rate', onclick: () => onRate(true) },
-    'Richtig'
+    t('session.correctBtn')
   );
   const rateRow = el('div', { class: 'learn-rate-row', hidden: true }, [wrongBtn, rightBtn]);
 
   function showFace() {
     faceLabel.textContent = flipped ? backLabel : frontLabel;
-    faceText.textContent = (flipped ? backText : frontText) || '(leer)';
+    faceText.textContent = (flipped ? backText : frontText) || t('common.empty');
     rateRow.hidden = !flipped;
   }
 
@@ -915,14 +951,21 @@ function buildFlipCard({ card, direction, deck, onRate }) {
 
   function handleKeydown(e) {
     if (!flipped) return;
-    if (e.key === 'ArrowRight') { e.preventDefault(); onRate(true); }
-    if (e.key === 'ArrowLeft') { e.preventDefault(); onRate(false); }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      onRate(true);
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      onRate(false);
+    }
   }
 
   return { cardBtn, rateRow, handleKeydown, focus: () => cardBtn.focus() };
 }
 
 function renderLearnSession(container, ctx) {
+  const t = ctx.t;
   const ls = ctx.state.learnSession;
   const deck = ctx.doc.deck;
   const card = ctx.doc.cards.find((c) => c.id === ls.currentCardId);
@@ -939,17 +982,17 @@ function renderLearnSession(container, ctx) {
     return;
   }
 
-  const flip = buildFlipCard({ card, direction: ls.direction, deck, onRate: (correct) => rateCurrentCard(ctx, ls, correct) });
+  const flip = buildFlipCard(ctx, { card, direction: ls.direction, deck, onRate: (correct) => rateCurrentCard(ctx, ls, correct) });
 
   const section = el('section', { 'aria-labelledby': 'learn-heading' }, [
-    el('h2', { id: 'learn-heading', class: 'visually-hidden' }, 'Lernsitzung'),
+    el('h2', { id: 'learn-heading', class: 'visually-hidden' }, t('learn.sessionHiddenHeading')),
   ]);
   section.addEventListener('keydown', flip.handleKeydown);
 
   const progress = el(
     'p',
     { class: 'learn-progress' },
-    `Richtig: ${ls.correctCount} · Falsch: ${ls.wrongCount} · Noch ${ls.queue.size() + 1} Karte${ls.queue.size() === 0 ? '' : 'n'}`
+    t('learn.progress', { correct: ls.correctCount, wrong: ls.wrongCount, n: ls.queue.size() + 1 })
   );
 
   section.append(
@@ -964,7 +1007,7 @@ function renderLearnSession(container, ctx) {
             ctx.render();
           },
         },
-        'Sitzung beenden'
+        t('learn.endButton')
       ),
       progress,
     ]),
@@ -977,11 +1020,12 @@ function renderLearnSession(container, ctx) {
 }
 
 function renderLearnSummary(container, ctx) {
+  const t = ctx.t;
   const ls = ctx.state.learnSession;
   container.append(
     el('section', { 'aria-labelledby': 'learn-heading' }, [
-      el('h2', { id: 'learn-heading' }, 'Sitzung beendet'),
-      el('p', {}, `${ls.correctCount} richtig, ${ls.wrongCount} falsch von ${ls.correctCount + ls.wrongCount} Karten.`),
+      el('h2', { id: 'learn-heading' }, t('learn.summaryHeading')),
+      el('p', {}, t('learn.summaryText', { correct: ls.correctCount, wrong: ls.wrongCount, total: ls.correctCount + ls.wrongCount })),
       el('div', { class: 'actions' }, [
         el(
           'button',
@@ -993,19 +1037,15 @@ function renderLearnSummary(container, ctx) {
               ctx.render();
             },
           },
-          'Neue Sitzung'
+          t('learn.newSession')
         ),
-        el(
-          'button',
-          { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.navigate('karten') },
-          'Zur Kartenliste'
-        ),
+        el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.navigate('karten') }, t('learn.toCards')),
       ]),
     ])
   );
 }
 
-// ---------- Testen ----------
+// ---------- Test ----------
 
 export function renderTestView(container, ctx) {
   const ts = ctx.state.testSession;
@@ -1015,23 +1055,24 @@ export function renderTestView(container, ctx) {
 }
 
 function renderTestSetup(container, ctx) {
+  const t = ctx.t;
   const deck = ctx.doc.deck;
   const countText = el('p', { class: 'hint' });
-  const startBtn = el('button', { type: 'button', class: 'btn btn-primary' }, 'Test starten');
+  const startBtn = el('button', { type: 'button', class: 'btn btn-primary' }, t('test.startButton'));
 
   function updateAll() {
     const cards = fields.onlyMarked ? ctx.doc.cards.filter((c) => c.marked) : ctx.doc.cards;
     if (ctx.doc.cards.length === 0) {
-      countText.textContent = 'Noch keine Karten. Lege welche über „Erfassen“ oder „Import“ an.';
+      countText.textContent = t('cards.emptyDeck');
     } else if (cards.length === 0) {
-      countText.textContent = 'Keine markierten Karten vorhanden.';
+      countText.textContent = t('learn.emptyMarked');
     } else {
-      countText.textContent = `${cards.length} Karte${cards.length === 1 ? '' : 'n'} stehen für diesen Test zur Verfügung.`;
+      countText.textContent = t('test.countHint', { n: cards.length });
     }
     startBtn.disabled = cards.length === 0;
   }
 
-  const fields = buildSessionOptionFields(deck, 'test', updateAll);
+  const fields = buildSessionOptionFields(ctx, deck, 'test', updateAll);
 
   let goalType = 'count';
   const goalCountInput = el('input', { type: 'number', min: '1', value: '20', id: 'goal-count-value' });
@@ -1039,18 +1080,20 @@ function renderTestSetup(container, ctx) {
   const goalAccuracyValueInput = el('input', { type: 'number', min: '1', max: '100', value: '90', id: 'goal-accuracy-value' });
   const goalAccuracyMinInput = el('input', { type: 'number', min: '1', value: '20', id: 'goal-accuracy-mincards' });
 
-  const countSub = el('div', { class: 'field-row' }, [el('label', {}, ['Anzahl Karten: ', goalCountInput])]);
-  const durationSub = el('div', { class: 'field-row', hidden: true }, [el('label', {}, ['Minuten: ', goalDurationInput])]);
+  const countSub = el('div', { class: 'field-row' }, [el('label', {}, [t('test.goalCountFieldLabel'), goalCountInput])]);
+  const durationSub = el('div', { class: 'field-row', hidden: true }, [
+    el('label', {}, [t('test.goalDurationFieldLabel'), goalDurationInput]),
+  ]);
   const accuracySub = el('div', { class: 'field-row', hidden: true }, [
-    el('label', {}, ['Zielquote (%): ', goalAccuracyValueInput]),
-    el('label', {}, ['Mindestanzahl Karten: ', goalAccuracyMinInput]),
+    el('label', {}, [t('test.goalAccuracyValueLabel'), goalAccuracyValueInput]),
+    el('label', {}, [t('test.goalAccuracyMinLabel'), goalAccuracyMinInput]),
   ]);
 
   const goalTypeField = el('fieldset', {}, [
-    el('legend', {}, 'Ziel'),
-    radioOption('test-goal-type', 'count', 'Kartenanzahl', true),
-    radioOption('test-goal-type', 'duration', 'Dauer', false),
-    radioOption('test-goal-type', 'accuracy', 'Trefferquote', false),
+    el('legend', {}, t('test.goalLegend')),
+    radioOption('test-goal-type', 'count', t('test.goalCount'), true),
+    radioOption('test-goal-type', 'duration', t('test.goalDuration'), false),
+    radioOption('test-goal-type', 'accuracy', t('test.goalAccuracy'), false),
   ]);
   goalTypeField.addEventListener('change', (e) => {
     goalType = e.target.value;
@@ -1083,7 +1126,7 @@ function renderTestSetup(container, ctx) {
 
   container.append(
     el('section', { 'aria-labelledby': 'test-heading' }, [
-      el('h2', { id: 'test-heading' }, 'Test einrichten'),
+      el('h2', { id: 'test-heading' }, t('test.setupHeading')),
       fields.directionField,
       fields.orderField,
       fields.markedField,
@@ -1110,6 +1153,7 @@ function drawNextTestCard(ctx, ts) {
 }
 
 async function rateTestCard(ctx, ts, correct) {
+  const t = ctx.t;
   const cardId = ts.currentCardId;
   const previousCard = ctx.doc.cards.find((c) => c.id === cardId);
   const updated = applyLearningResult(previousCard, correct);
@@ -1124,8 +1168,8 @@ async function rateTestCard(ctx, ts, correct) {
   }
 
   ctx.showToast({
-    message: describeRatingOutcome(previousCard, updated, correct),
-    actionLabel: 'Korrigieren',
+    message: describeRatingOutcome(ctx, previousCard, updated, correct),
+    actionLabel: t('session.correctionAction'),
     duration: 3000,
     onAction: async () => {
       const flippedCorrect = !correct;
@@ -1158,6 +1202,7 @@ async function rateTestCard(ctx, ts, correct) {
 }
 
 function renderTestSession(container, ctx) {
+  const t = ctx.t;
   const ts = ctx.state.testSession;
   const deck = ctx.doc.deck;
 
@@ -1178,19 +1223,19 @@ function renderTestSession(container, ctx) {
     return;
   }
 
-  const flip = buildFlipCard({ card, direction: ts.direction, deck, onRate: (correct) => rateTestCard(ctx, ts, correct) });
+  const flip = buildFlipCard(ctx, { card, direction: ts.direction, deck, onRate: (correct) => rateTestCard(ctx, ts, correct) });
 
   const section = el('section', { 'aria-labelledby': 'test-heading' }, [
-    el('h2', { id: 'test-heading', class: 'visually-hidden' }, 'Test'),
+    el('h2', { id: 'test-heading', class: 'visually-hidden' }, t('test.sessionHiddenHeading')),
   ]);
   section.addEventListener('keydown', flip.handleKeydown);
 
   const progress = describeGoalProgress(ts.goal, ctx.testSessionStats(ts));
-  const progressText = el('p', { class: 'learn-progress', id: 'test-progress' }, progress.text);
+  const progressText = el('p', { class: 'learn-progress', id: 'test-progress' }, t(progress.key, progress.params));
   const goalBadge = el(
     'span',
     { class: 'badge badge-goal-reached', id: 'test-goal-badge', hidden: !progress.reached },
-    'Ziel erreicht ✓'
+    t('test.goalReachedBadge')
   );
 
   const topActions = [
@@ -1204,13 +1249,13 @@ function renderTestSession(container, ctx) {
           ctx.render();
         },
       },
-      'Ergebnis anzeigen'
+      t('test.showResult')
     ),
   ];
   if (ts.goal.type === 'duration') {
     topActions.push(
-      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.pauseTestSession() }, 'Pause'),
-      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.extendTestSession(120) }, '+2 Minuten')
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.pauseTestSession() }, t('test.pause')),
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.extendTestSession(120) }, t('test.extend'))
     );
   }
 
@@ -1225,10 +1270,11 @@ function renderTestSession(container, ctx) {
 }
 
 function renderPausedTestSession(container, ctx, ts) {
+  const t = ctx.t;
   const progress = describeGoalProgress(ts.goal, ctx.testSessionStats(ts));
   container.append(
     el('section', { 'aria-labelledby': 'test-heading' }, [
-      el('h2', { id: 'test-heading', class: 'visually-hidden' }, 'Test pausiert'),
+      el('h2', { id: 'test-heading', class: 'visually-hidden' }, t('test.pausedHeading')),
       el('div', { class: 'learn-top-bar' }, [
         el(
           'button',
@@ -1240,26 +1286,32 @@ function renderPausedTestSession(container, ctx, ts) {
               ctx.render();
             },
           },
-          'Ergebnis anzeigen'
+          t('test.showResult')
         ),
-        el('p', { class: 'learn-progress' }, progress.text),
+        el('p', { class: 'learn-progress' }, t(progress.key, progress.params)),
       ]),
       el('div', { class: 'learn-card test-paused' }, [
-        el('p', { class: 'learn-face-text' }, 'Pausiert'),
-        el('button', { type: 'button', class: 'btn btn-primary', onclick: () => ctx.resumeTestSession() }, 'Weiter'),
+        el('p', { class: 'learn-face-text' }, t('test.pausedLabel')),
+        el('button', { type: 'button', class: 'btn btn-primary', onclick: () => ctx.resumeTestSession() }, t('test.resume')),
       ]),
     ])
   );
 }
 
 function renderTestSummary(container, ctx) {
+  const t = ctx.t;
   const ts = ctx.state.testSession;
   const total = ts.correctCount + ts.wrongCount;
   const rate = total === 0 ? 0 : Math.round((ts.correctCount / total) * 100);
   const stats = ctx.testSessionStats(ts);
   const seconds = Math.max(0, Math.round(stats.elapsedMs / 1000));
   const progress = describeGoalProgress(ts.goal, stats);
+  const goalLabel = describeGoalLabel(ts.goal);
   const wrongCards = ctx.doc.cards.filter((c) => ts.wrongCardIds.has(c.id));
+
+  const goalLine = progress.reached
+    ? t('test.summaryGoalReached', { label: t(goalLabel.key, goalLabel.params) })
+    : t('test.summaryGoalNotReached', { label: t(goalLabel.key, goalLabel.params) });
 
   const wrongList = wrongCards.length
     ? el(
@@ -1267,55 +1319,47 @@ function renderTestSummary(container, ctx) {
         { class: 'card-list' },
         wrongCards.map((c) =>
           el('li', { class: 'card-row' }, [
-            el('span', { class: 'card-text card-text-a' }, c.a || '(leer)'),
-            el('span', { class: 'card-text card-text-b' }, c.b || '(leer)'),
+            el('span', { class: 'card-text card-text-a' }, c.a || t('common.empty')),
+            el('span', { class: 'card-text card-text-b' }, c.b || t('common.empty')),
           ])
         )
       )
-    : el('p', { class: 'hint' }, 'Keine falsch beantworteten Karten.');
+    : el('p', { class: 'hint' }, t('test.noWrongCards'));
 
   container.append(
     el('section', { 'aria-labelledby': 'test-heading' }, [
-      el('h2', { id: 'test-heading' }, 'Ergebnis'),
-      el('p', {}, `Ziel: ${describeGoalLabel(ts.goal)} — ${progress.reached ? 'erreicht ✓' : 'nicht erreicht.'}`),
-      el('p', {}, `Trefferquote: ${rate}% (${ts.correctCount} von ${total} Karten richtig).`),
-      el('p', {}, `Dauer: ${formatDuration(seconds)} Minuten.`),
-      el('h3', {}, 'Falsch beantwortete Karten'),
+      el('h2', { id: 'test-heading' }, t('test.summaryHeading')),
+      el('p', {}, goalLine),
+      el('p', {}, t('test.summaryAccuracy', { rate, correct: ts.correctCount, total })),
+      el('p', {}, t('test.summaryDuration', { duration: formatDuration(seconds) })),
+      el('h3', {}, t('test.wrongCardsHeading')),
       wrongList,
-      el(
-        'div',
-        { class: 'actions' },
-        [
-          wrongCards.length
-            ? el(
-                'button',
-                {
-                  type: 'button',
-                  class: 'btn btn-primary',
-                  onclick: () => ctx.startPracticeForWrongCards(wrongCards.map((c) => c.id), ts.direction),
-                },
-                'Übungsrunde mit falschen Karten starten'
-              )
-            : null,
-          el(
-            'button',
-            {
-              type: 'button',
-              class: 'btn btn-secondary',
-              onclick: () => {
-                ctx.state.testSession = null;
-                ctx.render();
+      el('div', { class: 'actions' }, [
+        wrongCards.length
+          ? el(
+              'button',
+              {
+                type: 'button',
+                class: 'btn btn-primary',
+                onclick: () => ctx.startPracticeForWrongCards(wrongCards.map((c) => c.id), ts.direction),
               },
+              t('test.practiceWrong')
+            )
+          : null,
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'btn btn-secondary',
+            onclick: () => {
+              ctx.state.testSession = null;
+              ctx.render();
             },
-            'Neuer Test'
-          ),
-          el(
-            'button',
-            { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.navigate('karten') },
-            'Zur Kartenliste'
-          ),
-        ]
-      ),
+          },
+          t('test.newTest')
+        ),
+        el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.navigate('karten') }, t('test.toCards')),
+      ]),
     ])
   );
 }
@@ -1323,9 +1367,10 @@ function renderTestSummary(container, ctx) {
 // ---------- Import ----------
 
 export function renderImportView(container, ctx) {
+  const t = ctx.t;
   container.append(
     el('section', { 'aria-labelledby': 'import-heading' }, [
-      el('h2', { id: 'import-heading' }, 'Karten importieren'),
+      el('h2', { id: 'import-heading' }, t('import.heading')),
       buildCsvImport(ctx),
       buildBackupImport(ctx),
     ])
@@ -1333,24 +1378,25 @@ export function renderImportView(container, ctx) {
 }
 
 function buildCsvImport(ctx) {
+  const t = ctx.t;
   let rows = [];
   let colA = 0;
   let colB = 1;
   let hasHeader = true;
 
   const fileInput = el('input', { type: 'file', id: 'csv-file', accept: '.csv,text/csv' });
-  const colASelect = el('select', { 'aria-label': `Spalte für ${ctx.doc.deck.langA}` });
-  const colBSelect = el('select', { 'aria-label': `Spalte für ${ctx.doc.deck.langB}` });
+  const colASelect = el('select', { 'aria-label': t('import.colALabel', { lang: ctx.doc.deck.langA }) });
+  const colBSelect = el('select', { 'aria-label': t('import.colBLabel', { lang: ctx.doc.deck.langB }) });
   const headerCheckbox = el('input', { type: 'checkbox', id: 'csv-header', checked: true });
   const previewTable = el('table', { class: 'csv-preview' });
   const summary = el('p', { class: 'csv-summary' });
   const duplicateBox = el('div', { class: 'duplicate-box', hidden: true });
-  const commitBtn = el('button', { type: 'button', class: 'btn btn-primary', hidden: true }, 'Karten übernehmen');
+  const commitBtn = el('button', { type: 'button', class: 'btn btn-primary', hidden: true }, t('import.csvCommit'));
   const configBox = el('div', { hidden: true }, [
     el('div', { class: 'field-row' }, [
-      el('label', {}, [`Spalte für ${ctx.doc.deck.langA}: `, colASelect]),
-      el('label', {}, [`Spalte für ${ctx.doc.deck.langB}: `, colBSelect]),
-      el('label', {}, [headerCheckbox, ' Erste Zeile ist Kopfzeile']),
+      el('label', {}, [t('import.colALabel', { lang: ctx.doc.deck.langA }), colASelect]),
+      el('label', {}, [t('import.colBLabel', { lang: ctx.doc.deck.langB }), colBSelect]),
+      el('label', {}, [headerCheckbox, t('import.headerCheckbox')]),
     ]),
     previewTable,
     summary,
@@ -1361,7 +1407,7 @@ function buildCsvImport(ctx) {
   function columnOptions(select, selectedIndex, maxCols) {
     clear(select);
     for (let i = 0; i < maxCols; i++) {
-      select.append(el('option', { value: String(i), selected: i === selectedIndex }, `Spalte ${i + 1}`));
+      select.append(el('option', { value: String(i), selected: i === selectedIndex }, t('import.columnOption', { n: i + 1 })));
     }
   }
 
@@ -1372,7 +1418,8 @@ function buildCsvImport(ctx) {
       previewTable.append(el('tr', {}, row.map((cell) => el('td', {}, cell))));
     }
     const { cards, skipped } = rowsToCards(rows, colA, colB, { skipFirstRow: hasHeader });
-    summary.textContent = `${cards.length} Karte(n) werden angelegt.${skipped.length ? ` ${skipped.length} Zeile(n) ohne Vorderseite übersprungen.` : ''}`;
+    const skippedNote = skipped.length ? t('import.csvSkippedNote', { n: skipped.length }) : '';
+    summary.textContent = t('import.csvSummary', { n: cards.length, skippedNote });
     clear(duplicateBox);
     commitBtn.hidden = cards.length === 0;
   }
@@ -1415,28 +1462,24 @@ function buildCsvImport(ctx) {
     }
     clear(duplicateBox);
     duplicateBox.hidden = false;
-    const choice = el(
-      'fieldset',
-      {},
-      [
-        el('legend', {}, `${duplicates.length} Vorderseite(n) gibt es im Stapel schon. Wie verfahren?`),
-        radioOption('dup-choice', 'skip', 'Vorhandene Karten überspringen', true),
-        radioOption('dup-choice', 'replace', 'Vorhandene Karten ersetzen (nur Rückseite)', false),
-        radioOption('dup-choice', 'create', 'Trotzdem als neue Karte anlegen', false),
-        el(
-          'button',
-          {
-            type: 'button',
-            class: 'btn btn-primary',
-            onclick: () => {
-              const selected = duplicateBox.querySelector('input[name="dup-choice"]:checked').value;
-              applyCsvCards(cards, selected);
-            },
+    const choice = el('fieldset', {}, [
+      el('legend', {}, t('import.duplicateLegend', { n: duplicates.length })),
+      radioOption('dup-choice', 'skip', t('import.dupSkip'), true),
+      radioOption('dup-choice', 'replace', t('import.dupReplace'), false),
+      radioOption('dup-choice', 'create', t('import.dupCreate'), false),
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'btn btn-primary',
+          onclick: () => {
+            const selected = duplicateBox.querySelector('input[name="dup-choice"]:checked').value;
+            applyCsvCards(cards, selected);
           },
-          'Fortfahren'
-        ),
-      ]
-    );
+        },
+        t('import.continueButton')
+      ),
+    ]);
     duplicateBox.append(choice);
   });
 
@@ -1464,13 +1507,13 @@ function buildCsvImport(ctx) {
     fileInput.value = '';
     rows = [];
     configBox.hidden = true;
-    ctx.showToast({ message: 'CSV-Import abgeschlossen.' });
+    ctx.showToast({ message: t('import.csvDoneToast') });
     ctx.refreshHeaderCount();
   }
 
   return el('section', { 'aria-labelledby': 'csv-heading', class: 'import-section' }, [
-    el('h3', { id: 'csv-heading' }, 'Aus CSV-Datei'),
-    el('label', { for: 'csv-file' }, 'CSV-Datei auswählen'),
+    el('h3', { id: 'csv-heading' }, t('import.csvHeading')),
+    el('label', { for: 'csv-file' }, t('import.csvFileLabel')),
     fileInput,
     configBox,
   ]);
@@ -1485,16 +1528,17 @@ function radioOption(name, value, label, checked) {
 }
 
 function buildBackupImport(ctx) {
+  const t = ctx.t;
   let importedDoc = null;
 
   const fileInput = el('input', { type: 'file', id: 'backup-file', accept: '.json,.vok.json,application/json' });
   const summary = el('p', { class: 'backup-summary' });
   const modeBox = el('fieldset', { hidden: true }, [
-    el('legend', {}, 'Wie soll importiert werden?'),
-    radioOption('backup-mode', 'merge', 'Zusammenführen (empfohlen)', true),
-    radioOption('backup-mode', 'replace', 'Vollständig ersetzen', false),
+    el('legend', {}, t('import.backupModeLegend')),
+    radioOption('backup-mode', 'merge', t('import.modeMerge'), true),
+    radioOption('backup-mode', 'replace', t('import.modeReplace'), false),
   ]);
-  const commitBtn = el('button', { type: 'button', class: 'btn btn-primary', hidden: true }, 'Import durchführen');
+  const commitBtn = el('button', { type: 'button', class: 'btn btn-primary', hidden: true }, t('import.backupCommit'));
 
   fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -1503,12 +1547,12 @@ function buildBackupImport(ctx) {
     try {
       const text = await file.text();
       importedDoc = parseImportedText(text);
-      summary.textContent = `Datei enthält ${importedDoc.cards.length} Karte(n). Aktueller Stapel: ${ctx.doc.cards.length} Karte(n).`;
+      summary.textContent = t('import.backupSummary', { imported: importedDoc.cards.length, current: ctx.doc.cards.length });
       modeBox.hidden = false;
       commitBtn.hidden = false;
     } catch (err) {
       importedDoc = null;
-      summary.textContent = err.message;
+      summary.textContent = describeError(ctx, err);
       summary.className = 'backup-summary field-error';
       modeBox.hidden = true;
       commitBtn.hidden = true;
@@ -1529,13 +1573,13 @@ function buildBackupImport(ctx) {
     modeBox.hidden = true;
     commitBtn.hidden = true;
     summary.textContent = '';
-    ctx.showToast({ message: 'Import abgeschlossen.' });
+    ctx.showToast({ message: t('import.backupDoneToast') });
     ctx.render();
   });
 
   return el('section', { 'aria-labelledby': 'backup-heading', class: 'import-section' }, [
-    el('h3', { id: 'backup-heading' }, 'Aus Sicherungsdatei (.vok.json)'),
-    el('label', { for: 'backup-file' }, 'Sicherungsdatei auswählen'),
+    el('h3', { id: 'backup-heading' }, t('import.backupHeading')),
+    el('label', { for: 'backup-file' }, t('import.backupFileLabel')),
     fileInput,
     summary,
     modeBox,

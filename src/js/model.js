@@ -3,6 +3,19 @@
 
 export const SCHEMA_VERSION = 1;
 
+// Fehler tragen einen Übersetzungsschlüssel statt fertigen Texts, da model.js laut CLAUDE.md
+// ohne DOM- oder Sprachzugriff bleibt ("Module für Datenmodell ... und Übersetzungen" sind
+// getrennt); views.js übersetzt i18nKey/i18nParams beim Anzeigen. err.message bleibt der
+// Schlüssel selbst als Diagnose-Fallback, falls eine Stelle ihn doch einmal direkt ausgibt.
+export class ValidationError extends Error {
+  constructor(key, params = {}) {
+    super(key);
+    this.name = 'ValidationError';
+    this.i18nKey = key;
+    this.i18nParams = params;
+  }
+}
+
 const ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const ID_LENGTH = 8;
 
@@ -34,9 +47,9 @@ export function localDateIso(date = new Date()) {
 }
 
 export function createEmptyDocument({ profileName = '', uiLang = 'de', deckName, langA, langB, created = nowIso(), appVersion = '' } = {}) {
-  if (!deckName || !deckName.trim()) throw new Error('Der Stapel braucht einen Namen.');
-  if (!langA || !langA.trim()) throw new Error('Sprache A fehlt.');
-  if (!langB || !langB.trim()) throw new Error('Sprache B fehlt.');
+  if (!deckName || !deckName.trim()) throw new ValidationError('errors.deckNameRequired');
+  if (!langA || !langA.trim()) throw new ValidationError('errors.langARequired');
+  if (!langB || !langB.trim()) throw new ValidationError('errors.langBRequired');
   return {
     schema: SCHEMA_VERSION,
     meta: { app: appVersion, created, lastBackup: null },
@@ -49,8 +62,8 @@ export function createEmptyDocument({ profileName = '', uiLang = 'de', deckName,
 }
 
 export function createCard({ a, b, changed = nowIso() }) {
-  if (a == null) throw new Error('Vorderseite fehlt.');
-  if (b == null) throw new Error('Rückseite fehlt.');
+  if (a == null) throw new ValidationError('errors.frontRequired');
+  if (b == null) throw new ValidationError('errors.backRequired');
   return {
     id: generateId(),
     a: String(a),
@@ -172,25 +185,25 @@ export function restoreCards(doc, removed) {
 }
 
 export function validateDocument(raw) {
-  if (!raw || typeof raw !== 'object') throw new Error('Die Datei enthält kein gültiges Vokabeltrainer-Dokument.');
-  if (typeof raw.schema !== 'number') throw new Error('Der Datei fehlt die Schema-Version.');
+  if (!raw || typeof raw !== 'object') throw new ValidationError('errors.invalidDocument');
+  if (typeof raw.schema !== 'number') throw new ValidationError('errors.missingSchema');
   if (!raw.deck || typeof raw.deck.name !== 'string' || typeof raw.deck.langA !== 'string' || typeof raw.deck.langB !== 'string') {
-    throw new Error('Der Stapel-Eintrag der Datei ist unvollständig.');
+    throw new ValidationError('errors.incompleteDeck');
   }
-  if (!Array.isArray(raw.cards)) throw new Error('Die Kartenliste der Datei fehlt oder ist beschädigt.');
+  if (!Array.isArray(raw.cards)) throw new ValidationError('errors.missingCards');
   raw.cards.forEach((card, i) => {
     if (!card || typeof card.id !== 'string' || typeof card.a !== 'string' || typeof card.b !== 'string') {
-      throw new Error(`Karte Nr. ${i + 1} in der Datei ist beschädigt.`);
+      throw new ValidationError('errors.corruptCard', { n: i + 1 });
     }
     if (typeof card.box !== 'number' || card.box < 1 || card.box > 5) {
-      throw new Error(`Karte Nr. ${i + 1} hat einen ungültigen Kastenstand.`);
+      throw new ValidationError('errors.invalidBox', { n: i + 1 });
     }
   });
-  if (!Array.isArray(raw.days)) throw new Error('Der Tagesverlauf der Datei fehlt oder ist beschädigt.');
-  if (!Array.isArray(raw.sessions)) throw new Error('Die Sitzungsliste der Datei fehlt oder ist beschädigt.');
+  if (!Array.isArray(raw.days)) throw new ValidationError('errors.missingDays');
+  if (!Array.isArray(raw.sessions)) throw new ValidationError('errors.missingSessions');
   const seen = new Set();
   for (const card of raw.cards) {
-    if (seen.has(card.id)) throw new Error(`Die Karten-ID „${card.id}“ kommt in der Datei mehrfach vor.`);
+    if (seen.has(card.id)) throw new ValidationError('errors.duplicateId', { id: card.id });
     seen.add(card.id);
   }
   return raw;
@@ -200,12 +213,10 @@ export function validateDocument(raw) {
 // einer klaren Meldung statt sie stillschweigend zu verarbeiten.
 export function migrateDocument(raw) {
   if (typeof raw.schema !== 'number') {
-    throw new Error('Unbekanntes Dateiformat: keine Schema-Version angegeben.');
+    throw new ValidationError('errors.unknownFormat');
   }
   if (raw.schema > SCHEMA_VERSION) {
-    throw new Error(
-      `Diese Datei stammt aus einer neueren Version der App (Schema ${raw.schema}, unterstützt wird ${SCHEMA_VERSION}) und kann nicht geöffnet werden.`
-    );
+    throw new ValidationError('errors.newerSchema', { schema: raw.schema, supported: SCHEMA_VERSION });
   }
   let doc = raw;
   // Platz für künftige Migrationsschritte, sobald SCHEMA_VERSION erhöht wird.

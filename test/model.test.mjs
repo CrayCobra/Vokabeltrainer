@@ -17,6 +17,7 @@ import {
   migrateDocument,
   mergeDocuments,
   findDuplicateFronts,
+  ValidationError,
 } from '../src/js/model.js';
 
 test('generateId liefert kurze, eindeutige Zufallsketten', () => {
@@ -29,6 +30,13 @@ test('generateId liefert kurze, eindeutige Zufallsketten', () => {
 test('createEmptyDocument verlangt Stapelname und Sprachen', () => {
   assert.throws(() => createEmptyDocument({ deckName: '', langA: 'a', langB: 'b' }));
   assert.throws(() => createEmptyDocument({ deckName: 'x', langA: '', langB: 'b' }));
+  try {
+    createEmptyDocument({ deckName: '', langA: 'a', langB: 'b' });
+    assert.fail('hätte werfen müssen');
+  } catch (err) {
+    assert.ok(err instanceof ValidationError);
+    assert.equal(err.i18nKey, 'errors.deckNameRequired');
+  }
   const doc = createEmptyDocument({ deckName: 'Englisch 5', langA: 'Deutsch', langB: 'Englisch' });
   assert.equal(doc.schema, SCHEMA_VERSION);
   assert.deepEqual(doc.cards, []);
@@ -100,12 +108,15 @@ test('validateDocument verweigert doppelte Karten-IDs', () => {
   let doc = createEmptyDocument({ deckName: 'x', langA: 'a', langB: 'b' });
   const card = createCard({ a: 'a', b: 'b' });
   doc = addCards(doc, [card, { ...card }]);
-  assert.throws(() => validateDocument(doc), /mehrfach/);
+  assert.throws(() => validateDocument(doc), (err) => err.i18nKey === 'errors.duplicateId' && err.i18nParams.id === card.id);
 });
 
 test('migrateDocument verweigert neuere Schemaversionen', () => {
-  assert.throws(() => migrateDocument({ schema: SCHEMA_VERSION + 1 }), /neueren Version/);
-  assert.throws(() => migrateDocument({}), /Unbekanntes Dateiformat/);
+  assert.throws(
+    () => migrateDocument({ schema: SCHEMA_VERSION + 1 }),
+    (err) => err.i18nKey === 'errors.newerSchema' && err.i18nParams.schema === SCHEMA_VERSION + 1
+  );
+  assert.throws(() => migrateDocument({}), (err) => err.i18nKey === 'errors.unknownFormat');
 });
 
 test('mergeDocuments: jüngerer Änderungsstempel gewinnt bei gleicher Karten-ID', () => {

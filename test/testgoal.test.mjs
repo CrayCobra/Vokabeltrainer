@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatDuration, isGoalReached, describeGoalProgress, describeGoalLabel } from '../src/js/testgoal.js';
+import { translate } from '../src/js/i18n.js';
 
 test('formatDuration formatiert Sekunden als m:ss', () => {
   assert.equal(formatDuration(0), '0:00');
@@ -35,24 +36,32 @@ test('isGoalReached: Trefferquote verlangt Mindestanzahl UND erreichte Quote gle
   assert.equal(isGoalReached(goal, { correctCount: 18, wrongCount: 2, elapsedMs: 0 }), true);
 });
 
-test('describeGoalProgress liefert lesbaren Text je Zielart', () => {
+test('describeGoalProgress liefert Übersetzungsschlüssel + Parameter je Zielart (kein fertiger Text)', () => {
   const countGoal = describeGoalProgress({ type: 'count', value: 20 }, { correctCount: 4, wrongCount: 1, elapsedMs: 0 });
-  assert.equal(countGoal.text, '5 von 20 Karten');
+  assert.equal(countGoal.key, 'testgoal.progressCount');
+  assert.deepEqual(countGoal.params, { current: 5, target: 20 });
   assert.equal(countGoal.reached, false);
+  assert.equal(translate('de', countGoal.key, countGoal.params), '5 von 20 Karten');
+  assert.equal(translate('en', countGoal.key, countGoal.params), '5 of 20 cards');
 
   const durationGoal = describeGoalProgress({ type: 'duration', value: 300 }, { correctCount: 0, wrongCount: 0, elapsedMs: 125000 });
-  assert.equal(durationGoal.text, '2:05 von 5:00 Minuten');
+  assert.equal(translate('de', durationGoal.key, durationGoal.params), '2:05 von 5:00 Minuten');
 
   const accuracyGoal = describeGoalProgress(
     { type: 'accuracy', value: 90, minCards: 10 },
     { correctCount: 9, wrongCount: 1, elapsedMs: 0 }
   );
-  assert.equal(accuracyGoal.text, '10 von mindestens 10 Karten · Trefferquote 90% (Ziel 90%)');
+  assert.equal(translate('de', accuracyGoal.key, accuracyGoal.params), '10 von mindestens 10 Karten · Trefferquote 90% (Ziel 90%)');
   assert.equal(accuracyGoal.reached, true);
 });
 
-test('describeGoalLabel beschreibt das gewählte Ziel kompakt', () => {
-  assert.equal(describeGoalLabel({ type: 'count', value: 20 }), '20 Karten');
-  assert.equal(describeGoalLabel({ type: 'duration', value: 300 }), '5:00 Minuten');
-  assert.equal(describeGoalLabel({ type: 'accuracy', value: 90, minCards: 10 }), '90% Trefferquote ab 10 Karten');
+test('describeGoalLabel liefert Übersetzungsschlüssel + Parameter, übersetzbar in allen Sprachen', () => {
+  const count = describeGoalLabel({ type: 'count', value: 20 });
+  assert.equal(translate('de', count.key, count.params), '20 Karten');
+
+  const duration = describeGoalLabel({ type: 'duration', value: 300 });
+  assert.equal(translate('de', duration.key, duration.params), '5:00 Minuten');
+
+  const accuracy = describeGoalLabel({ type: 'accuracy', value: 90, minCards: 10 });
+  assert.equal(translate('de', accuracy.key, accuracy.params), '90% Trefferquote ab 10 Karten');
 });

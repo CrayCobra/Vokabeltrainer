@@ -31,8 +31,8 @@ test('ein zweiter Export nach dem Import erzeugt bitgleiche Bytes', () => {
 });
 
 test('parseImportedText verweigert unbekannten oder beschädigten Inhalt mit klarer Meldung', () => {
-  assert.throws(() => parseImportedText('das ist kein JSON'), /gültiges JSON/);
-  assert.throws(() => parseImportedText('{}'), /Schema-Version/);
+  assert.throws(() => parseImportedText('das ist kein JSON'), (err) => err.i18nKey === 'errors.invalidJson');
+  assert.throws(() => parseImportedText('{}'), (err) => err.i18nKey === 'errors.unknownFormat');
   assert.throws(() => parseImportedText('{"schema":1}'));
 });
 

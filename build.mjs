@@ -29,6 +29,13 @@ const MODULE_ORDER = [
   'bufferedwriter.js',
   'theme.js',
   'stats.js',
+  'i18n-de.js',
+  'i18n-en.js',
+  'i18n-es.js',
+  'i18n-fr.js',
+  'i18n-la.js',
+  'i18n.js',
+  'uilang.js',
   'views.js',
   'app.js',
 ];
@@ -52,9 +59,16 @@ async function validateModuleGraph() {
   const indexOf = new Map(MODULE_ORDER.map((name, i) => [name, i]));
   for (const [i, name] of MODULE_ORDER.entries()) {
     const raw = await readFile(path.join(SRC, 'js', name), 'utf8');
-    const importMatches = raw.matchAll(/^import\s+\{[^}]*\}\s+from\s+['"]\.\/([^'"]+)['"];\s*$/gm);
+    const importMatches = raw.matchAll(/^import\s+\{([^}]*)\}\s+from\s+['"]\.\/([^'"]+)['"];\s*$/gm);
     for (const match of importMatches) {
-      const dep = match[1];
+      const [, names, dep] = match;
+      // stripModuleSyntax entfernt die ganze import-Zeile und verlässt sich darauf, dass der
+      // importierte Name danach als gleichnamige Top-Level-Bindung existiert; "import { x as y }"
+      // bricht das, weil der Rest der Datei "y" verwendet, das es im Bündel nie gibt. Einmal
+      // passiert (i18n.js), als "de is not defined" erst zur Laufzeit sichtbar, nicht beim Bauen.
+      if (/\bas\b/.test(names)) {
+        throw new Error(`${name} importiert mit "as" (umbenennend) aus './${dep}' – das unterstützt das Bau-Skript nicht, da es import-Zeilen nur entfernt, ohne Umbenennungen nachzuziehen. Ohne "as" importieren.`);
+      }
       if (!indexOf.has(dep)) {
         throw new Error(`${name} importiert './${dep}', das nicht in MODULE_ORDER steht.`);
       }
@@ -62,6 +76,39 @@ async function validateModuleGraph() {
         throw new Error(`${name} importiert './${dep}', das in MODULE_ORDER erst an gleicher Stelle oder später folgt.`);
       }
     }
+  }
+}
+
+const TOP_LEVEL_DECL = /^(?:export\s+)?(?:async\s+)?function\s+(\w+)|^(?:export\s+)?const\s+(\w+)|^(?:export\s+)?let\s+(\w+)|^(?:export\s+)?class\s+(\w+)/gm;
+
+function extractTopLevelNames(source) {
+  const names = [];
+  for (const match of source.matchAll(TOP_LEVEL_DECL)) {
+    names.push(match[1] || match[2] || match[3] || match[4]);
+  }
+  return names;
+}
+
+// Prüft, dass kein von zwei Dateien unabhängig vergebener Name (exportiert oder nicht) nach
+// dem Bündeln in derselben Top-Level-Ebene kollidiert. Eine Kollision zwischen zwei `const`
+// wirft beim Bauen (vm.Script erkennt "already been declared"), eine zwischen zwei `function`
+// dagegen nicht – das ist gültiges JavaScript, überschreibt aber still die erste Definition
+// mit der zweiten. Genau das ist einmal passiert (cardWord in allen fünf i18n-*.js-Dateien),
+// unbemerkt von jedem Test, der die echten ES-Module statt des Bündels prüft. Diese Prüfung
+// deckt beide Fälle vorab ab, unabhängig davon, ob JavaScript selbst einen Fehler wirft.
+async function assertNoDuplicateTopLevelNames() {
+  const owners = new Map();
+  for (const name of MODULE_ORDER) {
+    const raw = await readFile(path.join(SRC, 'js', name), 'utf8');
+    for (const ident of extractTopLevelNames(raw)) {
+      if (!owners.has(ident)) owners.set(ident, []);
+      owners.get(ident).push(name);
+    }
+  }
+  const collisions = [...owners.entries()].filter(([, files]) => files.length > 1);
+  if (collisions.length > 0) {
+    const details = collisions.map(([ident, files]) => `${ident} (${files.join(', ')})`).join('; ');
+    throw new Error(`Mehrfach vergebene Bezeichner würden sich nach dem Bündeln gegenseitig überschreiben: ${details}`);
   }
 }
 
@@ -193,6 +240,7 @@ async function buildPages(script, css, version) {
 
 async function main() {
   await validateModuleGraph();
+  await assertNoDuplicateTopLevelNames();
   const version = await readVersion();
   const css = await readFile(path.join(SRC, 'app.css'), 'utf8');
   const script = await bundleScript(version);

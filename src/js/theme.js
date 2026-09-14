@@ -2,13 +2,13 @@
 // überschreiben (siehe vokabel-app-entwurf.md, Abschnitt 9). Eine Kleinigkeit im Sinne von
 // CLAUDE.md, daher in localStorage abgelegt statt im .vok.json-Dokument.
 
-const STORAGE_KEY = 'vokabeltrainer.theme';
+const THEME_STORAGE_KEY = 'vokabeltrainer.theme';
 export const THEME_OPTIONS = ['system', 'light', 'dark'];
 
 export function loadThemePreference(store = globalThis.localStorage) {
   if (!store) return 'system';
   try {
-    const value = store.getItem(STORAGE_KEY);
+    const value = store.getItem(THEME_STORAGE_KEY);
     return THEME_OPTIONS.includes(value) ? value : 'system';
   } catch {
     return 'system';
@@ -19,8 +19,8 @@ export function saveThemePreference(value, store = globalThis.localStorage) {
   if (!THEME_OPTIONS.includes(value)) throw new Error(`Unbekanntes Erscheinungsbild: ${value}`);
   if (!store) return;
   try {
-    if (value === 'system') store.removeItem(STORAGE_KEY);
-    else store.setItem(STORAGE_KEY, value);
+    if (value === 'system') store.removeItem(THEME_STORAGE_KEY);
+    else store.setItem(THEME_STORAGE_KEY, value);
   } catch {
     // Kleinigkeit: ist localStorage nicht verfügbar, bleibt nur die Systemeinstellung wirksam.
   }

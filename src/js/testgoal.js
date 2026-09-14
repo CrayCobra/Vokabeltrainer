@@ -21,31 +21,33 @@ export function isGoalReached(goal, { correctCount, wrongCount, elapsedMs }) {
   throw new Error(`Unbekannte Zielart: ${goal.type}`);
 }
 
-// Liefert eine für die Oberfläche fertige Beschreibung des aktuellen Fortschritts.
+// Liefert Übersetzungsschlüssel + Parameter statt fertigen Texts (siehe CLAUDE.md: eigenes
+// Modul für Übersetzungen); views.js übersetzt mit ctx.t(key, params).
 export function describeGoalProgress(goal, { correctCount, wrongCount, elapsedMs }) {
   const total = correctCount + wrongCount;
   const reached = isGoalReached(goal, { correctCount, wrongCount, elapsedMs });
   if (goal.type === 'count') {
-    return { reached, text: `${total} von ${goal.value} Karten` };
+    return { reached, key: 'testgoal.progressCount', params: { current: total, target: goal.value } };
   }
   if (goal.type === 'duration') {
     const current = formatDuration(elapsedMs / 1000);
     const target = formatDuration(goal.value);
-    return { reached, text: `${current} von ${target} Minuten` };
+    return { reached, key: 'testgoal.progressDuration', params: { current, target } };
   }
   if (goal.type === 'accuracy') {
     const rateNow = total === 0 ? 0 : Math.round((correctCount / total) * 100);
     return {
       reached,
-      text: `${total} von mindestens ${goal.minCards} Karten · Trefferquote ${rateNow}% (Ziel ${goal.value}%)`,
+      key: 'testgoal.progressAccuracy',
+      params: { current: total, minCards: goal.minCards, rateNow, rateTarget: goal.value },
     };
   }
   throw new Error(`Unbekannte Zielart: ${goal.type}`);
 }
 
 export function describeGoalLabel(goal) {
-  if (goal.type === 'count') return `${goal.value} Karten`;
-  if (goal.type === 'duration') return `${formatDuration(goal.value)} Minuten`;
-  if (goal.type === 'accuracy') return `${goal.value}% Trefferquote ab ${goal.minCards} Karten`;
+  if (goal.type === 'count') return { key: 'testgoal.labelCount', params: { value: goal.value } };
+  if (goal.type === 'duration') return { key: 'testgoal.labelDuration', params: { value: formatDuration(goal.value) } };
+  if (goal.type === 'accuracy') return { key: 'testgoal.labelAccuracy', params: { value: goal.value, minCards: goal.minCards } };
   throw new Error(`Unbekannte Zielart: ${goal.type}`);
 }

@@ -21,7 +21,9 @@
 </head>
 <body>
 <div id="app"></div>
-<noscript>Der Vokabeltrainer benötigt JavaScript, um zu funktionieren.</noscript>
+<!-- Kann nicht per ctx.t() übersetzt werden: ohne JavaScript läuft auch die Übersetzung
+     nicht. Deshalb alle fünf Sprachen fest hier, statt nur eine zu raten. -->
+<noscript>Der Vokabeltrainer benötigt JavaScript, um zu funktionieren. · Vokabeltrainer needs JavaScript to work. · Vokabeltrainer necesita JavaScript para funcionar. · Vokabeltrainer a besoin de JavaScript pour fonctionner. · Ad Vokabeltrainer JavaScript necessārium est.</noscript>
 <script type="module">
   import { startApp } from './js/app.js';
   startApp(document.getElementById('app'));

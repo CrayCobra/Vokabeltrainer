@@ -1,7 +1,7 @@
 // Export/Import als .vok.json-Datei. Rein textbasiert, kein DOM-Zugriff, damit ein
 // Export-Import-Durchlauf deterministisch und ohne Browser testbar bleibt.
 
-import { migrateDocument, validateDocument } from './model.js';
+import { migrateDocument, validateDocument, ValidationError } from './model.js';
 
 export function serializeDocument(doc) {
   return JSON.stringify(doc, null, 2);
@@ -12,7 +12,7 @@ export function parseImportedText(text) {
   try {
     raw = JSON.parse(text);
   } catch {
-    throw new Error('Die Datei ist kein gültiges JSON und kann nicht gelesen werden.');
+    throw new ValidationError('errors.invalidJson');
   }
   const migrated = migrateDocument(raw);
   return validateDocument(migrated);

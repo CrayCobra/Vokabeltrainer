@@ -7,7 +7,7 @@ import { createBufferedWriter } from './bufferedwriter.js';
 import { renderOnboarding, renderShell } from './views.js';
 import { icons } from './icons.js';
 import { serializeDocument, buildExportFilename } from './fileio.js';
-import { recordSession, nowIso } from './model.js';
+import { recordSession, nowIso, getActiveDeck } from './model.js';
 import { createSessionQueue } from './learn.js';
 import { describeGoalProgress } from './testgoal.js';
 import { loadThemePreference, saveThemePreference, applyThemePreference } from './theme.js';
@@ -92,6 +92,7 @@ export async function startApp(root) {
     cardsSession: freshCardsSession(),
     learnSession: null,
     testSession: null,
+    creatingDeck: false,
   };
 
   function showToast({ message, actionLabel, onAction, duration = 7000 }) {
@@ -181,6 +182,7 @@ export async function startApp(root) {
     if (cardIds.length === 0) return;
     const queue = createSessionQueue(cardIds);
     state.learnSession = {
+      deckId: getActiveDeck(doc).id,
       order,
       direction,
       onlyMarked,
@@ -202,6 +204,7 @@ export async function startApp(root) {
       const session = {
         date: ls.startedAt,
         mode: 'learn',
+        deckId: ls.deckId,
         order: ls.order,
         direction: ls.direction,
         correct: ls.correctCount,
@@ -273,6 +276,7 @@ export async function startApp(root) {
     if (cardIds.length === 0) return;
     const queue = createSessionQueue(cardIds);
     const ts = {
+      deckId: getActiveDeck(doc).id,
       order,
       direction,
       onlyMarked,
@@ -328,6 +332,7 @@ export async function startApp(root) {
       const session = {
         date: ts.startedAt,
         mode: 'test',
+        deckId: ts.deckId,
         order: ts.order,
         direction: ts.direction,
         goal: ts.goal,
@@ -438,6 +443,7 @@ export async function startApp(root) {
     if (state.view === 'testen') leaveTestView();
     state.view = next;
     state.cardsSession = freshCardsSession();
+    state.creatingDeck = false;
     render();
   });
 

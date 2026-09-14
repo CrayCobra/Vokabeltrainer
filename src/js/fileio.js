@@ -31,9 +31,11 @@ function slugify(name) {
   );
 }
 
+// Der Dateiname beruht auf dem Profilnamen, nicht auf einem einzelnen Stapel: die Datei
+// enthält seit Schema 2 alle Stapel des Profils, nicht nur einen.
 export function buildExportFilename(doc, date = new Date()) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
-  return `${slugify(doc.deck.name)}-${y}${m}${d}.vok.json`;
+  return `${slugify(doc.profile.name)}-${y}${m}${d}.vok.json`;
 }

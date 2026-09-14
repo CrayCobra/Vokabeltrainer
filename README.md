@@ -8,7 +8,10 @@ Stand: Inkrement 6 (Datenmodell, Speicherschicht, Editor, Lernmodus mit Kästen 
 Reparaturkiste, Testmodus mit den drei Zielarten, manuell überschreibbares Hell/Dunkel,
 Statistik mit Lernserie, Heatmap und Kastenverteilung, vollständige Mehrsprachigkeit in
 Deutsch, Englisch, Spanisch, Französisch und Latein, Auslieferung als eigenständige HTML-Datei
-und als installierbare, offlinefähige Web-App).
+und als installierbare, offlinefähige Web-App) plus mehrere Stapel pro Profil: ein Profil bleibt
+Mehrbenutzerbetrieb-frei, verwaltet aber beliebig viele Stapel nebeneinander (Umschalter und
+„+“ im Kopfbereich, Umbenennen/Löschen in den Einstellungen), mit geräteweiter Lernserie/Heatmap
+über alle Stapel hinweg und stapelweiser Kastenverteilung.
 
 ## Bauen
 

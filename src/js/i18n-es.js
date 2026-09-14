@@ -18,6 +18,8 @@ export const dictEs = {
   'header.lastBackupNever': 'nunca',
   'header.lastBackup': 'Última copia de seguridad: {date}',
   'header.save': 'Guardar',
+  'header.deckSwitcherLabel': 'Mazo activo',
+  'header.newDeckAria': 'Crear un mazo nuevo',
 
   'common.empty': '(vacío)',
   'common.cancel': 'Cancelar',
@@ -46,6 +48,10 @@ export const dictEs = {
   'settings.themeLight': 'Claro',
   'settings.themeDark': 'Oscuro',
   'settings.languageLegend': 'Idioma de la interfaz',
+  'settings.deckManageHeading': 'Gestionar mazos',
+  'settings.editDeckAria': 'Editar «{name}»',
+  'settings.deleteDeckAria': 'Eliminar «{name}»',
+  'settings.deckDeletedToast': 'Mazo «{name}» eliminado.',
 
   'stats.streakHeading': 'Racha de aprendizaje',
   'stats.streakDays': (p) => (p.n === 1 ? 'día seguido' : 'días seguidos'),
@@ -64,7 +70,7 @@ export const dictEs = {
   'stats.weekdaySun': 'do',
   'stats.legendLess': 'Menos',
   'stats.legendMore': 'Más',
-  'stats.boxHeading': 'Distribución por casilleros',
+  'stats.boxHeading': 'Distribución por casilleros – {deck}',
   'stats.boxLabel': 'Casillero {n}',
   'stats.totals': (p) => `${p.total} ${cardWordEs(p.total)} en total, ${p.repair} de ellas en el casillero de repaso.`,
 
@@ -98,7 +104,7 @@ export const dictEs = {
   'cards.frontLabel': 'Anverso',
   'cards.backLabel': 'Reverso',
 
-  'capture.heading': 'Entrada rápida',
+  'capture.heading': 'Entrada rápida – {deck}',
   'capture.hint':
     'Una línea para el anverso, la siguiente para el reverso, alternando. Las líneas en blanco solo separan visualmente. Una línea con tabulador forma una carta por sí sola (anverso tabulador reverso).',
   'capture.summary': (p) => `Se crearán ${p.n} ${cardWordEs(p.n)}.`,
@@ -177,7 +183,7 @@ export const dictEs = {
   'testgoal.labelAccuracy': '{value}% de aciertos a partir de {minCards} cartas',
 
   'import.heading': 'Importar cartas',
-  'import.csvHeading': 'Desde un archivo CSV',
+  'import.csvHeading': 'Desde un archivo CSV – {deck}',
   'import.csvFileLabel': 'Elegir archivo CSV',
   'import.colALabel': 'Columna para {lang}: ',
   'import.colBLabel': 'Columna para {lang}: ',
@@ -208,6 +214,8 @@ export const dictEs = {
   'toast.backupDownloaded': 'Copia de seguridad descargada.',
 
   'errors.deckNameRequired': 'El mazo necesita un nombre.',
+  'errors.cardDeckRequired': 'A la carta le falta el mazo.',
+  'errors.lastDeckRequired': 'Debe quedar al menos un mazo.',
   'errors.langARequired': 'Falta el idioma A.',
   'errors.langBRequired': 'Falta el idioma B.',
   'errors.frontRequired': 'Falta el anverso.',

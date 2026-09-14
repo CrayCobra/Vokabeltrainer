@@ -3,14 +3,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { serializeDocument, parseImportedText, buildExportFilename } from '../src/js/fileio.js';
-import { createEmptyDocument, createCard, addCards } from '../src/js/model.js';
+import { createEmptyDocument, createCard, addCards, getActiveDeck } from '../src/js/model.js';
 
 function sampleDoc() {
-  let doc = createEmptyDocument({ deckName: 'Englisch 5. Klasse', langA: 'Deutsch', langB: 'Englisch', appVersion: '0.1.0' });
+  let doc = createEmptyDocument({
+    deckName: 'Englisch 5. Klasse',
+    langA: 'Deutsch',
+    langB: 'Englisch',
+    profileName: 'Mira',
+    appVersion: '0.1.0',
+  });
+  const deckId = getActiveDeck(doc).id;
   doc = addCards(doc, [
-    createCard({ a: 'Haus', b: 'house' }),
-    createCard({ a: 'Apfel', b: '' }),
-    createCard({ a: 'läuft, rennt', b: 'runs; "fast"' }),
+    createCard({ a: 'Haus', b: 'house', deckId }),
+    createCard({ a: 'Apfel', b: '', deckId }),
+    createCard({ a: 'läuft, rennt', b: 'runs; "fast"', deckId }),
   ]);
   return doc;
 }
@@ -39,6 +46,6 @@ test('parseImportedText verweigert unbekannten oder beschädigten Inhalt mit kla
 test('buildExportFilename erzeugt einen stabilen, dateisystemtauglichen Namen', () => {
   const doc = sampleDoc();
   const name = buildExportFilename(doc, new Date('2026-09-14T10:00:00Z'));
-  assert.equal(name, 'englisch-5-klasse-20260914.vok.json');
+  assert.equal(name, 'mira-20260914.vok.json');
   assert.doesNotMatch(name, /[^a-z0-9.-]/);
 });

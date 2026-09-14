@@ -18,6 +18,14 @@ import {
   restoreCards,
   findDuplicateFronts,
   mergeDocuments,
+  createDeck,
+  addDeck,
+  applyDeckEdit,
+  replaceDeck,
+  deleteDeck,
+  restoreDeck,
+  getActiveDeck,
+  setActiveDeck,
 } from './model.js';
 import { parseQuickCapture } from './capture.js';
 import { decodeCsvBytes, detectDelimiter, parseCsv, rowsToCards } from './csv.js';
@@ -38,6 +46,14 @@ function debounce(fn, wait) {
     clearTimeout(t);
     t = setTimeout(() => fn(...args), wait);
   };
+}
+
+// Karten des gerade aktiven Stapels: jede Ansicht, die Karten zeigt oder eine Sitzung
+// aufbaut, arbeitet nur mit dieser Teilmenge, nie mit ctx.doc.cards direkt (vokabel-app-
+// entwurf.md, Kapitel 1: mehrere Stapel pro Profil, Sitzungen beziehen sich auf genau einen).
+function activeDeckCards(ctx) {
+  const deckId = getActiveDeck(ctx.doc).id;
+  return ctx.doc.cards.filter((c) => c.deckId === deckId);
 }
 
 // err.i18nKey stammt aus model.js/fileio.js (ValidationError); ein Fallback auf err.message
@@ -190,7 +206,8 @@ export function renderShell(root, ctx) {
 
   const header = el('header', { class: 'app-header' }, [
     el('div', { class: 'app-header-top' }, [
-      el('h1', {}, ctx.doc.deck.name),
+      el('h1', { class: 'visually-hidden' }, t('app.title')),
+      renderDeckSwitcher(ctx),
       el('span', { class: 'version-tag' }, `v${ctx.APP_VERSION}`),
     ]),
     nav,
@@ -230,9 +247,120 @@ export function renderShell(root, ctx) {
   else renderLearnView(main, ctx);
 }
 
+// ---------- Stapel-Umschalter (Kopfbereich) ----------
+// Jede Sitzung und jede Kartenansicht bezieht sich auf genau einen Stapel (vokabel-app-
+// entwurf.md, Kapitel 1); der Wechsel geschieht hier zentral im Kopfbereich, das Anlegen direkt
+// daneben. Umbenennen und Löschen liegt in den Einstellungen (siehe renderDeckManagementSection).
+
+function renderDeckSwitcher(ctx) {
+  const t = ctx.t;
+  if (ctx.state.creatingDeck) return renderDeckCreateForm(ctx);
+
+  const activeDeck = getActiveDeck(ctx.doc);
+  const select = el(
+    'select',
+    {
+      id: 'deck-switcher',
+      class: 'deck-switcher-select',
+      'aria-label': t('header.deckSwitcherLabel'),
+      onchange: async (e) => {
+        try {
+          await ctx.persist(setActiveDeck(ctx.doc, e.target.value));
+        } catch {
+          return;
+        }
+        ctx.render();
+      },
+    },
+    ctx.doc.decks.map((d) => el('option', { value: d.id, selected: d.id === activeDeck.id }, d.name))
+  );
+  const addBtn = el(
+    'button',
+    {
+      type: 'button',
+      class: 'icon-btn',
+      'aria-label': t('header.newDeckAria'),
+      onclick: () => {
+        ctx.state.creatingDeck = true;
+        ctx.render();
+      },
+    },
+    [icons.plus()]
+  );
+  return el('div', { class: 'deck-switcher' }, [select, addBtn]);
+}
+
+function renderDeckCreateForm(ctx) {
+  const t = ctx.t;
+  const nameInput = el('input', {
+    type: 'text',
+    required: true,
+    autocomplete: 'off',
+    'aria-label': t('onboarding.deckNameLabel'),
+    placeholder: t('onboarding.deckNameLabel'),
+  });
+  const langAInput = el('input', {
+    type: 'text',
+    required: true,
+    autocomplete: 'off',
+    'aria-label': t('onboarding.langALabel'),
+    placeholder: t('onboarding.langALabel'),
+    value: t('onboarding.defaultLangA'),
+  });
+  const langBInput = el('input', {
+    type: 'text',
+    required: true,
+    autocomplete: 'off',
+    'aria-label': t('onboarding.langBLabel'),
+    placeholder: t('onboarding.langBLabel'),
+    value: t('onboarding.defaultLangB'),
+  });
+  const errorBox = el('p', { class: 'field-error', hidden: true, role: 'alert' });
+
+  const cancel = () => {
+    ctx.state.creatingDeck = false;
+    ctx.render();
+  };
+
+  const form = el(
+    'form',
+    {
+      class: 'deck-switcher deck-create-form',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        errorBox.hidden = true;
+        let deck;
+        try {
+          deck = createDeck({ name: nameInput.value, langA: langAInput.value, langB: langBInput.value });
+        } catch (err) {
+          errorBox.textContent = describeError(ctx, err);
+          errorBox.hidden = false;
+          return;
+        }
+        try {
+          await ctx.persist(setActiveDeck(addDeck(ctx.doc, deck), deck.id));
+        } catch {
+          return;
+        }
+        ctx.state.creatingDeck = false;
+        ctx.render();
+      },
+    },
+    [
+      nameInput,
+      langAInput,
+      langBInput,
+      errorBox,
+      el('button', { type: 'submit', class: 'btn btn-primary' }, t('onboarding.createButton')),
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: cancel }, t('common.cancel')),
+    ]
+  );
+  return form;
+}
+
 // ---------- Settings ----------
-// Geräte-/Profilweite Voreinstellungen, unabhängig vom Stapel: Erscheinungsbild und
-// Oberflächensprache.
+// Geräte-/Profilweite Voreinstellungen, unabhängig vom aktiven Stapel: Erscheinungsbild,
+// Oberflächensprache und die Verwaltung (Umbenennen/Löschen) aller Stapel des Profils.
 
 function renderSettingsView(container, ctx) {
   const t = ctx.t;
@@ -261,6 +389,117 @@ function renderSettingsView(container, ctx) {
       languageField,
     ])
   );
+  container.append(renderDeckManagementSection(ctx));
+}
+
+function renderDeckManagementSection(ctx) {
+  const t = ctx.t;
+  const list = el('ul', { class: 'card-list', id: 'deck-manage-list' });
+  let editingId = null;
+
+  function renderList() {
+    clear(list);
+    for (const deck of ctx.doc.decks) {
+      list.append(editingId === deck.id ? renderEditRow(deck) : renderRow(deck));
+    }
+  }
+
+  function renderRow(deck) {
+    const editBtn = el(
+      'button',
+      { type: 'button', class: 'icon-btn', 'aria-label': t('settings.editDeckAria', { name: deck.name }), onclick: () => { editingId = deck.id; renderList(); } },
+      [icons.edit()]
+    );
+    const deleteBtn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'icon-btn',
+        'aria-label': t('settings.deleteDeckAria', { name: deck.name }),
+        onclick: () => doDeleteDeck(deck.id),
+      },
+      [icons.trash()]
+    );
+    return el('li', { class: 'card-row' }, [
+      el('span', { class: 'card-text card-text-a' }, deck.name),
+      el('span', { class: 'card-text card-text-b' }, t('session.directionOption', { a: deck.langA, b: deck.langB })),
+      editBtn,
+      deleteBtn,
+    ]);
+  }
+
+  function renderEditRow(deck) {
+    const nameInput = el('input', { type: 'text', value: deck.name, 'aria-label': t('onboarding.deckNameLabel') });
+    const aInput = el('input', { type: 'text', value: deck.langA, 'aria-label': t('onboarding.langALabel') });
+    const bInput = el('input', { type: 'text', value: deck.langB, 'aria-label': t('onboarding.langBLabel') });
+
+    const commit = async () => {
+      const updated = applyDeckEdit(deck, { name: nameInput.value.trim(), langA: aInput.value.trim(), langB: bInput.value.trim() });
+      try {
+        await ctx.persist(replaceDeck(ctx.doc, updated));
+      } catch {
+        return;
+      }
+      editingId = null;
+      renderList();
+    };
+    const cancel = () => {
+      editingId = null;
+      renderList();
+    };
+    for (const input of [nameInput, aInput, bInput]) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') cancel();
+      });
+    }
+
+    return el('li', { class: 'card-row card-row-editing' }, [
+      nameInput,
+      aInput,
+      bInput,
+      el('button', { type: 'button', class: 'btn btn-primary', onclick: commit }, [icons.check(), el('span', {}, t('common.save'))]),
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: cancel }, t('common.cancel')),
+    ]);
+  }
+
+  async function doDeleteDeck(deckId) {
+    let result;
+    try {
+      result = deleteDeck(ctx.doc, deckId);
+    } catch (err) {
+      ctx.showToast({ message: describeError(ctx, err) });
+      return;
+    }
+    try {
+      await ctx.persist(result.doc);
+    } catch {
+      return;
+    }
+    renderList();
+    ctx.showToast({
+      message: t('settings.deckDeletedToast', { name: result.removedDeck.deck.name }),
+      actionLabel: t('cards.undo'),
+      onAction: async () => {
+        const restored = restoreDeck(ctx.doc, result);
+        try {
+          await ctx.persist(restored);
+        } catch {
+          return;
+        }
+        renderList();
+        ctx.render();
+      },
+    });
+    ctx.render();
+  }
+
+  renderList();
+
+  return el('section', { 'aria-labelledby': 'deck-manage-heading' }, [
+    el('h2', { id: 'deck-manage-heading' }, t('settings.deckManageHeading')),
+    list,
+  ]);
 }
 
 // ---------- Stats ----------
@@ -359,9 +598,12 @@ function renderHeatmapSection(ctx, doc) {
   ]);
 }
 
+// Kastenverteilung bleibt je Stapel (Kastenstände hängen an Karten, siehe vokabel-app-
+// entwurf.md Kapitel 4), anders als Serie und Heatmap, die geräteweit über alle Stapel laufen.
 function renderBoxDistributionSection(ctx, doc) {
   const t = ctx.t;
-  const dist = boxDistribution(doc.cards);
+  const activeDeck = getActiveDeck(doc);
+  const dist = boxDistribution(activeDeckCards(ctx));
   const maxCount = Math.max(1, ...Object.values(dist.counts));
 
   const bars = [1, 2, 3, 4, 5].map((box) => {
@@ -375,7 +617,7 @@ function renderBoxDistributionSection(ctx, doc) {
   });
 
   return el('section', { 'aria-labelledby': 'boxdist-heading' }, [
-    el('h2', { id: 'boxdist-heading' }, t('stats.boxHeading')),
+    el('h2', { id: 'boxdist-heading' }, t('stats.boxHeading', { deck: activeDeck.name })),
     el('div', { class: 'box-bars' }, bars),
     el('p', {}, t('stats.totals', { total: dist.total, repair: dist.repair })),
   ]);
@@ -453,7 +695,7 @@ export function renderCardsView(container, ctx) {
 
   const bulkBar = el('div', { class: 'bulk-bar', hidden: true });
   const rowsContainer = el('div', { class: 'card-rows', id: 'card-rows' });
-  const heading = el('h2', { id: 'cards-heading' }, t('cards.heading', { n: ctx.doc.cards.length }));
+  const heading = el('h2', { id: 'cards-heading' }, t('cards.heading', { n: activeDeckCards(ctx).length }));
 
   container.append(
     el('section', { 'aria-labelledby': 'cards-heading' }, [
@@ -517,7 +759,7 @@ export function renderCardsView(container, ctx) {
     }
     ids.forEach((id) => session.selection.delete(id));
     session.undo = { removed };
-    heading.textContent = t('cards.heading', { n: ctx.doc.cards.length });
+    heading.textContent = t('cards.heading', { n: activeDeckCards(ctx).length });
     renderRows();
     updateBulkBar();
     ctx.showToast({
@@ -532,7 +774,7 @@ export function renderCardsView(container, ctx) {
           return;
         }
         session.undo = null;
-        heading.textContent = t('cards.heading', { n: ctx.doc.cards.length });
+        heading.textContent = t('cards.heading', { n: activeDeckCards(ctx).length });
         renderRows();
       },
     });
@@ -540,12 +782,12 @@ export function renderCardsView(container, ctx) {
 
   function renderRows() {
     clear(rowsContainer);
-    if (ctx.doc.cards.length === 0) {
+    if (activeDeckCards(ctx).length === 0) {
       rowsContainer.append(el('p', { class: 'empty-state' }, t('cards.emptyDeck')));
       updateBulkBar();
       return;
     }
-    const visible = ctx.doc.cards.filter(matchesFilters);
+    const visible = activeDeckCards(ctx).filter(matchesFilters);
     if (visible.length === 0) {
       rowsContainer.append(el('p', { class: 'empty-state' }, t('cards.emptyFiltered')));
       updateBulkBar();
@@ -710,7 +952,8 @@ export function renderCaptureView(container, ctx) {
           ctx.showToast({ message: t('capture.noneFound') });
           return;
         }
-        const newCards = cards.map((c) => createCard(c));
+        const deckId = getActiveDeck(ctx.doc).id;
+        const newCards = cards.map((c) => createCard({ ...c, deckId }));
         try {
           await ctx.persist(addCards(ctx.doc, newCards));
         } catch {
@@ -741,7 +984,7 @@ export function renderCaptureView(container, ctx) {
 
   container.append(
     el('section', { 'aria-labelledby': 'capture-heading' }, [
-      el('h2', { id: 'capture-heading' }, t('capture.heading')),
+      el('h2', { id: 'capture-heading' }, t('capture.heading', { deck: getActiveDeck(ctx.doc).name })),
       el('p', { id: 'capture-hint', class: 'hint' }, t('capture.hint')),
       el('div', { class: 'capture-layout' }, [
         el('div', { class: 'capture-input' }, [textarea]),
@@ -817,14 +1060,15 @@ function buildSessionOptionFields(ctx, deck, idPrefix, onChange) {
 
 function renderLearnSetup(container, ctx) {
   const t = ctx.t;
-  const deck = ctx.doc.deck;
+  const deck = getActiveDeck(ctx.doc);
   const countText = el('p', { class: 'hint' });
   const startBtn = el('button', { type: 'button', class: 'btn btn-primary' }, t('learn.startButton'));
 
   function updateCount() {
-    const cards = fields.onlyMarked ? ctx.doc.cards.filter((c) => c.marked) : ctx.doc.cards;
+    const deckCards = activeDeckCards(ctx);
+    const cards = fields.onlyMarked ? deckCards.filter((c) => c.marked) : deckCards;
     const repairCount = cards.filter((c) => c.repair).length;
-    if (ctx.doc.cards.length === 0) {
+    if (deckCards.length === 0) {
       countText.textContent = t('cards.emptyDeck');
     } else if (cards.length === 0) {
       countText.textContent = t('learn.emptyMarked');
@@ -838,7 +1082,7 @@ function renderLearnSetup(container, ctx) {
 
   startBtn.addEventListener('click', () => {
     const { order, direction, onlyMarked } = fields;
-    const cardIds = buildQueue(ctx.doc.cards, { order, onlyMarked });
+    const cardIds = buildQueue(activeDeckCards(ctx), { order, onlyMarked });
     ctx.startLearnSession({ order, direction, onlyMarked, cardIds });
   });
 
@@ -967,7 +1211,7 @@ function buildFlipCard(ctx, { card, direction, deck, onRate }) {
 function renderLearnSession(container, ctx) {
   const t = ctx.t;
   const ls = ctx.state.learnSession;
-  const deck = ctx.doc.deck;
+  const deck = getActiveDeck(ctx.doc);
   const card = ctx.doc.cards.find((c) => c.id === ls.currentCardId);
 
   // Kann durch eine zwischenzeitliche Löschung der Karte theoretisch entfallen; dann einfach
@@ -1056,13 +1300,14 @@ export function renderTestView(container, ctx) {
 
 function renderTestSetup(container, ctx) {
   const t = ctx.t;
-  const deck = ctx.doc.deck;
+  const deck = getActiveDeck(ctx.doc);
   const countText = el('p', { class: 'hint' });
   const startBtn = el('button', { type: 'button', class: 'btn btn-primary' }, t('test.startButton'));
 
   function updateAll() {
-    const cards = fields.onlyMarked ? ctx.doc.cards.filter((c) => c.marked) : ctx.doc.cards;
-    if (ctx.doc.cards.length === 0) {
+    const deckCards = activeDeckCards(ctx);
+    const cards = fields.onlyMarked ? deckCards.filter((c) => c.marked) : deckCards;
+    if (deckCards.length === 0) {
       countText.textContent = t('cards.emptyDeck');
     } else if (cards.length === 0) {
       countText.textContent = t('learn.emptyMarked');
@@ -1118,7 +1363,7 @@ function renderTestSetup(container, ctx) {
 
   startBtn.addEventListener('click', () => {
     const { order, direction, onlyMarked } = fields;
-    const cardIds = buildQueue(ctx.doc.cards, { order, onlyMarked });
+    const cardIds = buildQueue(activeDeckCards(ctx), { order, onlyMarked });
     ctx.startTestSession({ order, direction, onlyMarked, goal: currentGoal(), cardIds });
   });
 
@@ -1145,7 +1390,7 @@ function renderTestSetup(container, ctx) {
 // bis die Person selbst auswertet, statt bei knappen Stapeln vorzeitig abzubrechen.
 function drawNextTestCard(ctx, ts) {
   if (ts.queue.isEmpty()) {
-    const refillIds = buildQueue(ctx.doc.cards, { order: ts.order, onlyMarked: ts.onlyMarked });
+    const refillIds = buildQueue(activeDeckCards(ctx), { order: ts.order, onlyMarked: ts.onlyMarked });
     if (refillIds.length === 0) return null;
     ts.queue.enqueueMany(refillIds);
   }
@@ -1204,7 +1449,7 @@ async function rateTestCard(ctx, ts, correct) {
 function renderTestSession(container, ctx) {
   const t = ctx.t;
   const ts = ctx.state.testSession;
-  const deck = ctx.doc.deck;
+  const deck = getActiveDeck(ctx.doc);
 
   if (ts.paused) {
     renderPausedTestSession(container, ctx, ts);
@@ -1384,9 +1629,10 @@ function buildCsvImport(ctx) {
   let colB = 1;
   let hasHeader = true;
 
+  const activeDeck = getActiveDeck(ctx.doc);
   const fileInput = el('input', { type: 'file', id: 'csv-file', accept: '.csv,text/csv' });
-  const colASelect = el('select', { 'aria-label': t('import.colALabel', { lang: ctx.doc.deck.langA }) });
-  const colBSelect = el('select', { 'aria-label': t('import.colBLabel', { lang: ctx.doc.deck.langB }) });
+  const colASelect = el('select', { 'aria-label': t('import.colALabel', { lang: activeDeck.langA }) });
+  const colBSelect = el('select', { 'aria-label': t('import.colBLabel', { lang: activeDeck.langB }) });
   const headerCheckbox = el('input', { type: 'checkbox', id: 'csv-header', checked: true });
   const previewTable = el('table', { class: 'csv-preview' });
   const summary = el('p', { class: 'csv-summary' });
@@ -1394,8 +1640,8 @@ function buildCsvImport(ctx) {
   const commitBtn = el('button', { type: 'button', class: 'btn btn-primary', hidden: true }, t('import.csvCommit'));
   const configBox = el('div', { hidden: true }, [
     el('div', { class: 'field-row' }, [
-      el('label', {}, [t('import.colALabel', { lang: ctx.doc.deck.langA }), colASelect]),
-      el('label', {}, [t('import.colBLabel', { lang: ctx.doc.deck.langB }), colBSelect]),
+      el('label', {}, [t('import.colALabel', { lang: activeDeck.langA }), colASelect]),
+      el('label', {}, [t('import.colBLabel', { lang: activeDeck.langB }), colBSelect]),
       el('label', {}, [headerCheckbox, t('import.headerCheckbox')]),
     ]),
     previewTable,
@@ -1455,7 +1701,7 @@ function buildCsvImport(ctx) {
 
   commitBtn.addEventListener('click', () => {
     const { cards } = rowsToCards(rows, colA, colB, { skipFirstRow: hasHeader });
-    const duplicates = findDuplicateFronts(ctx.doc, cards);
+    const duplicates = findDuplicateFronts(ctx.doc, cards, activeDeck.id);
     if (duplicates.length === 0) {
       applyCsvCards(cards, 'create');
       return;
@@ -1484,20 +1730,21 @@ function buildCsvImport(ctx) {
   });
 
   async function applyCsvCards(cards, mode) {
-    const duplicates = findDuplicateFronts(ctx.doc, cards);
+    const duplicates = findDuplicateFronts(ctx.doc, cards, activeDeck.id);
     const duplicateFronts = new Set(duplicates.map((d) => d.candidate.a.trim()));
+    const makeCard = (c) => createCard({ ...c, deckId: activeDeck.id });
     let doc = ctx.doc;
     if (mode === 'skip') {
-      const toAdd = cards.filter((c) => !duplicateFronts.has(c.a.trim())).map(createCard);
+      const toAdd = cards.filter((c) => !duplicateFronts.has(c.a.trim())).map(makeCard);
       doc = addCards(doc, toAdd);
     } else if (mode === 'replace') {
       for (const c of cards) {
-        const existing = doc.cards.find((ec) => ec.a.trim() === c.a.trim());
+        const existing = doc.cards.find((ec) => ec.deckId === activeDeck.id && ec.a.trim() === c.a.trim());
         if (existing) doc = replaceCard(doc, applyCardEdit(existing, { b: c.b }));
-        else doc = addCards(doc, [createCard(c)]);
+        else doc = addCards(doc, [makeCard(c)]);
       }
     } else {
-      doc = addCards(doc, cards.map(createCard));
+      doc = addCards(doc, cards.map(makeCard));
     }
     try {
       await ctx.persist(doc);
@@ -1512,7 +1759,7 @@ function buildCsvImport(ctx) {
   }
 
   return el('section', { 'aria-labelledby': 'csv-heading', class: 'import-section' }, [
-    el('h3', { id: 'csv-heading' }, t('import.csvHeading')),
+    el('h3', { id: 'csv-heading' }, t('import.csvHeading', { deck: activeDeck.name })),
     el('label', { for: 'csv-file' }, t('import.csvFileLabel')),
     fileInput,
     configBox,

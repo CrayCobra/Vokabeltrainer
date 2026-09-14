@@ -4,7 +4,7 @@ import { buildQueue, createSessionQueue } from '../src/js/learn.js';
 import { createCard } from '../src/js/model.js';
 
 function card(overrides) {
-  return { ...createCard({ a: 'x', b: 'y' }), ...overrides };
+  return { ...createCard({ a: 'x', b: 'y', deckId: 'deck1' }), ...overrides };
 }
 
 test('buildQueue: sequential hält die Eingabereihenfolge innerhalb jeder Gruppe', () => {

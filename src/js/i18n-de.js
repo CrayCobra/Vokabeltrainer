@@ -21,6 +21,8 @@ export const dictDe = {
   'header.lastBackupNever': 'noch nie',
   'header.lastBackup': 'Zuletzt gesichert: {date}',
   'header.save': 'Sichern',
+  'header.deckSwitcherLabel': 'Aktiver Stapel',
+  'header.newDeckAria': 'Neuen Stapel anlegen',
 
   'common.empty': '(leer)',
   'common.cancel': 'Abbrechen',
@@ -49,6 +51,10 @@ export const dictDe = {
   'settings.themeLight': 'Hell',
   'settings.themeDark': 'Dunkel',
   'settings.languageLegend': 'Oberflächensprache',
+  'settings.deckManageHeading': 'Stapel verwalten',
+  'settings.editDeckAria': '„{name}“ bearbeiten',
+  'settings.deleteDeckAria': '„{name}“ löschen',
+  'settings.deckDeletedToast': 'Stapel „{name}“ gelöscht.',
 
   'stats.streakHeading': 'Lernserie',
   'stats.streakDays': (p) => (p.n === 1 ? 'Tag in Folge' : 'Tage in Folge'),
@@ -67,7 +73,7 @@ export const dictDe = {
   'stats.weekdaySun': 'So',
   'stats.legendLess': 'Weniger',
   'stats.legendMore': 'Mehr',
-  'stats.boxHeading': 'Kastenverteilung',
+  'stats.boxHeading': 'Kastenverteilung – {deck}',
   'stats.boxLabel': 'Kasten {n}',
   'stats.totals': (p) => `${p.total} ${cardWordDe(p.total)} insgesamt, davon ${p.repair} in der Reparaturkiste.`,
 
@@ -101,7 +107,7 @@ export const dictDe = {
   'cards.frontLabel': 'Vorderseite',
   'cards.backLabel': 'Rückseite',
 
-  'capture.heading': 'Schnellerfassung',
+  'capture.heading': 'Schnellerfassung – {deck}',
   'capture.hint':
     'Eine Zeile Vorderseite, nächste Zeile Rückseite, abwechselnd. Leere Zeilen trennen nur optisch. Enthält eine Zeile einen Tabulator, bildet sie allein eine Karte (Vorderseite Tab Rückseite).',
   'capture.summary': (p) => `${p.n} ${cardWordDe(p.n)} werden angelegt.`,
@@ -180,7 +186,7 @@ export const dictDe = {
   'testgoal.labelAccuracy': '{value}% Trefferquote ab {minCards} Karten',
 
   'import.heading': 'Karten importieren',
-  'import.csvHeading': 'Aus CSV-Datei',
+  'import.csvHeading': 'Aus CSV-Datei – {deck}',
   'import.csvFileLabel': 'CSV-Datei auswählen',
   'import.colALabel': 'Spalte für {lang}: ',
   'import.colBLabel': 'Spalte für {lang}: ',
@@ -210,6 +216,8 @@ export const dictDe = {
   'toast.backupDownloaded': 'Sicherung wurde heruntergeladen.',
 
   'errors.deckNameRequired': 'Der Stapel braucht einen Namen.',
+  'errors.cardDeckRequired': 'Der Karte fehlt der Stapel.',
+  'errors.lastDeckRequired': 'Es muss mindestens ein Stapel bestehen bleiben.',
   'errors.langARequired': 'Sprache A fehlt.',
   'errors.langBRequired': 'Sprache B fehlt.',
   'errors.frontRequired': 'Vorderseite fehlt.',

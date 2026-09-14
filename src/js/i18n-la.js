@@ -24,6 +24,8 @@ export const dictLa = {
   'header.lastBackupNever': 'numquam',
   'header.lastBackup': 'Ultima conservātiō: {date}',
   'header.save': 'Servāre',
+  'header.deckSwitcherLabel': 'Cumulus āctīvus',
+  'header.newDeckAria': 'Novum cumulum creāre',
 
   'common.empty': '(vacuum)',
   'common.cancel': 'Omittere',
@@ -52,6 +54,10 @@ export const dictLa = {
   'settings.themeLight': 'Clāra',
   'settings.themeDark': 'Obscūra',
   'settings.languageLegend': 'Lingua āreae ūtentis',
+  'settings.deckManageHeading': 'Cumulōs Administrāre',
+  'settings.editDeckAria': '„{name}“ ēmendāre',
+  'settings.deleteDeckAria': '„{name}“ dēlēre',
+  'settings.deckDeletedToast': 'Cumulus „{name}“ dēlētus est.',
 
   'stats.streakHeading': 'Seriēs Discendī',
   'stats.streakDays': (p) => (p.n === 1 ? 'diēs continuus' : 'diēs continuī'),
@@ -70,7 +76,7 @@ export const dictLa = {
   'stats.weekdaySun': 'So',
   'stats.legendLess': 'Minus',
   'stats.legendMore': 'Plūs',
-  'stats.boxHeading': 'Distribūtiō per Capsās',
+  'stats.boxHeading': 'Distribūtiō per Capsās – {deck}',
   'stats.boxLabel': 'Capsa {n}',
   'stats.totals': (p) => `${p.total} ${cardWordLa(p.total)} omnīnō, ex hīs ${p.repair} in capsā reparātiōnis.`,
 
@@ -104,7 +110,7 @@ export const dictLa = {
   'cards.frontLabel': 'Faciēs prior',
   'cards.backLabel': 'Faciēs posterior',
 
-  'capture.heading': 'Additiō Celeris',
+  'capture.heading': 'Additiō Celeris – {deck}',
   'capture.hint':
     'Ūna līnea faciēī priōris, proxima posteriōris, alternātim. Līneae vacuae tantum vīsū sēparant. Sī līnea tabulātōrem continet, sōla chartam efficit (faciēs prior tabulātor posterior).',
   'capture.summary': (p) => `${p.n} ${cardWordLa(p.n)} creābuntur.`,
@@ -183,7 +189,7 @@ export const dictLa = {
   'testgoal.labelAccuracy': '{value}% rēctōrum ā {minCards} chartīs',
 
   'import.heading': 'Chartās Importāre',
-  'import.csvHeading': 'Ē fasciculō CSV',
+  'import.csvHeading': 'Ē fasciculō CSV – {deck}',
   'import.csvFileLabel': 'Fasciculum CSV ēligere',
   'import.colALabel': 'Columna prō {lang}: ',
   'import.colBLabel': 'Columna prō {lang}: ',
@@ -214,6 +220,8 @@ export const dictLa = {
   'toast.backupDownloaded': 'Conservātiō dēprōmpta est.',
 
   'errors.deckNameRequired': 'Cumulō nōmen deest.',
+  'errors.cardDeckRequired': 'Chartae cumulus deest.',
+  'errors.lastDeckRequired': 'Saltem ūnus cumulus manēre dēbet.',
   'errors.langARequired': 'Lingua A deest.',
   'errors.langBRequired': 'Lingua B deest.',
   'errors.frontRequired': 'Faciēs prior deest.',

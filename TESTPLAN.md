@@ -206,6 +206,27 @@ Browser-Simulationsbibliothek automatisiert getestet, um keine externe Abhängig
 einzuführen. Vor jeder Veröffentlichung sollte die DevTools-Protocol-Prüfung wiederholt werden,
 siehe Prüfliste unten.
 
+## Mehrere Stapel pro Profil – automatisiert abgedeckt
+
+Nachträgliche Erweiterung nach Inkrement 6: ein Profil (weiterhin kein Mehrbenutzerbetrieb)
+verwaltet mehrere Stapel nebeneinander, siehe `vokabel-app-entwurf.md` Kapitel 1, 4 und 6.
+Schema wechselt von 1 auf 2 (`deck`-Einzelfeld → `decks[]`, Karten/Sitzungen mit `deckId`).
+
+| Datei | Prüft |
+|---|---|
+| `test/model.test.mjs` | `createDeck`/`addDeck`/`applyDeckEdit`/`replaceDeck`/`getActiveDeck`/`setActiveDeck`; `deleteDeck` löscht kaskadierend die Karten des Stapels, verweigert das Löschen des letzten Stapels, `restoreDeck` macht beides rückgängig; `validateDocument` prüft `decks[]`/`activeDeckId`/Karten-`deckId`; `migrateDocument` hebt Schema 1 auf Schema 2 (ein bestehender Stapel wird zu `decks[0]`, Karten und Sitzungen erhalten dessen `deckId`); `mergeDocuments` führt Stapel nach Änderungsstempel zusammen und behält den aktiven Stapel, sofern er noch existiert; `findDuplicateFronts` erkennt Duplikate nur innerhalb desselben Stapels; `recordSession`/`days[]` bleiben geräteweit über alle Stapel hinweg |
+| `test/icon-render.test.mjs`, `test/build.test.mjs`, `test/learn.test.mjs`, `test/fileio.test.mjs` | Unverändertes Verhalten nach der Umstellung auf `deckId` (Testkarten erhalten jetzt explizit eine `deckId`, `buildExportFilename` beruht auf `profile.name` statt einem einzelnen Stapelnamen) |
+
+Manuell im eingebetteten Browser-Tool gegen `dist/app.html` durchgespielt (siehe Gesprächsverlauf
+statt Chrome-DevTools-Protocol-Log): zwei Stapel angelegt, Karten getrennt über die
+Schnellerfassung erfasst, Kartenliste/Statistik/Kastenverteilung zeigen nur die Karten des
+jeweils aktiven Stapels, Stapel im Einstellungen-Bereich umbenannt und gelöscht mit
+funktionierendem Rückgängig-Toast, eine Lernsitzung im aktiven Stapel durchgespielt und
+anschließend der tatsächliche IndexedDB-Inhalt geprüft: `sessions[].deckId` korrekt gesetzt,
+`days[]` geräteweit (nicht je Stapel) aktualisiert, Kastenstände nur der gelernten Karten erhöht.
+Nicht geprüft (siehe Prüfliste unten für echte Geräte): CSV-Import in einen von zwei Stapeln,
+Zusammenführen zweier Exportdateien mit unterschiedlichen Stapeln auf einem echten zweiten Gerät.
+
 ## Manuelle Prüfliste vor jedem „fertig“
 
 Nicht automatisierbar ohne echten Browser bzw. echtes Gerät:

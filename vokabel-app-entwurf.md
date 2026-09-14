@@ -4,9 +4,9 @@ Stand: 14.09.2026, Version 0.1 des Entwurfs. Grundlage sind die getroffenen Ents
 
 ## 1. Rahmen
 
-Die App ist ein digitaler Karteikasten für ein Kind ab Klasse 5, weitergebbar an andere Kinder, ohne Installation nutzbar und ohne dauerhafte Betreuungspflicht durch den Ersteller. Sie läuft vollständig im Browser, hält alle Daten lokal auf dem Gerät und nutzt eine Exportdatei als offizielles Sicherungs- und Transportmedium. Es gibt genau ein Profil pro Installation.
+Die App ist ein digitaler Karteikasten für ein Kind ab Klasse 5, weitergebbar an andere Kinder, ohne Installation nutzbar und ohne dauerhafte Betreuungspflicht durch den Ersteller. Sie läuft vollständig im Browser, hält alle Daten lokal auf dem Gerät und nutzt eine Exportdatei als offizielles Sicherungs- und Transportmedium. Es gibt genau ein Profil pro Installation – aber innerhalb dieses einen Profils mehrere Stapel nebeneinander, weil an einer weiterführenden Schule mehrere Fremdsprachen eher die Regel als die Ausnahme sind. „Ein Profil" heißt also kein Mehrbenutzerbetrieb auf einem Gerät, nicht ein Stapel pro Gerät; wer Englisch und Französisch parallel lernt, wechselt zwischen zwei Stapeln im selben Profil, statt Exportdateien hin- und herzuladen.
 
-Verbindlich entschieden: sitzungsbasierte Kästen ohne Kalenderfälligkeiten, Antwort ausschließlich durch Umdrehen und Selbsteinschätzung, Abfragerichtung pro Sitzung wählbar bei einem gemeinsamen Kastenstand je Karte, Karte besteht nur aus Text A und Text B, keine Töne und keine Vibration, Lernserie mit einem Joker-Tag pro Woche, Oberfläche vollständig übersetzt einschließlich Latein, Auslieferung als eigenständige HTML-Datei und parallel als installierbare Web-App.
+Verbindlich entschieden: sitzungsbasierte Kästen ohne Kalenderfälligkeiten, Antwort ausschließlich durch Umdrehen und Selbsteinschätzung, Abfragerichtung pro Sitzung wählbar bei einem gemeinsamen Kastenstand je Karte, Karte besteht nur aus Text A und Text B, keine Töne und keine Vibration, Lernserie mit einem Joker-Tag pro Woche, Oberfläche vollständig übersetzt einschließlich Latein, Auslieferung als eigenständige HTML-Datei und parallel als installierbare Web-App, mehrere Stapel pro Profil mit einer geräteweiten (nicht stapelweisen) Lernserie.
 
 ## 2. Lernlogik
 
@@ -15,6 +15,8 @@ Jede Karte trägt einen Kastenstand von 1 bis 5, einen Zähler der aufeinanderfo
 Die Reihenfolge innerhalb einer Sitzung folgt dem gewählten Modus: zufällig, sequentiell in Eingabereihenfolge oder nach Kästen von niedrig nach hoch. In allen drei Modi gilt eine Vorfahrtsregel: Karten aus der Reparaturkiste werden bevorzugt gezogen, aber nicht am Stück, sondern eingestreut im Verhältnis von etwa zwei Reparaturkarten auf drei reguläre Karten, damit die Sitzung nicht zur Strafrunde wird. Eine gerade falsch beantwortete Karte erscheint frühestens nach drei weiteren Karten wieder, sonst merkt man sich nur die Bildschirmposition statt der Vokabel.
 
 Markierte Karten sind ein eigener, vom Kasten unabhängiger Filter. Eine Sitzung kann auf markierte Karten eingeschränkt werden, ohne dass die Markierung den Kastenstand beeinflusst.
+
+Jede Sitzung bezieht sich auf genau einen Stapel: die Kartenauswahl (Reihenfolge, Einstreuen, Markierungsfilter) läuft ausschließlich über die Karten des gerade aktiven Stapels, nie stapelübergreifend.
 
 Weil die Selbsteinschätzung ohne Tippprüfung auskommt, braucht sie einen Schutz gegen versehentliche Klicks: nach der Bewertung bleibt drei Sekunden lang ein unauffälliger Korrekturweg sichtbar, danach ist die Bewertung endgültig. Zurückspringen über mehrere Karten gibt es bewusst nicht.
 
@@ -28,11 +30,11 @@ Am Ende steht ein Ergebnisbildschirm mit erreichtem Ziel, Trefferquote, Dauer un
 
 ## 4. Statistik
 
-Die Lernserie zählt Kalendertage, an denen mindestens eine abgeschlossene Sitzung stattfand. Pro Kalenderwoche von Montag bis Sonntag darf genau ein Tag ohne Sitzung übersprungen werden, ohne dass die Serie bricht; der Joker verbraucht sich automatisch und wird im Dashboard sichtbar als verbraucht oder verfügbar angezeigt. Zwei Fehltage in derselben Woche brechen die Serie. Neben der laufenden Serie steht die längste jemals erreichte Serie.
+Die Lernserie zählt Kalendertage, an denen mindestens eine abgeschlossene Sitzung stattfand – geräteweit über alle Stapel hinweg, nicht je Stapel. Wer heute nur Französisch gelernt hat, hält die Serie damit auch für Latein am Leben; das entspricht der Sache besser als getrennte Serien, weil das eigentliche Ziel „heute etwas gelernt" ist, unabhängig von der Sprache. Pro Kalenderwoche von Montag bis Sonntag darf genau ein Tag ohne Sitzung übersprungen werden, ohne dass die Serie bricht; der Joker verbraucht sich automatisch und wird im Dashboard sichtbar als verbraucht oder verfügbar angezeigt. Zwei Fehltage in derselben Woche brechen die Serie. Neben der laufenden Serie steht die längste jemals erreichte Serie.
 
-Die Heatmap zeigt pro Kalendertag die Anzahl richtiger Karten in fünf Intensitätsstufen. Auf dem Smartphone werden zwölf Wochen dargestellt, auf größeren Bildschirmen 26 Wochen, beides seitlich scrollbar. Jede Zelle nennt beim Antippen Datum, richtige und falsche Karten. Wichtig ist die Farbwahl: die Stufen müssen sich auch bei Rot-Grün-Schwäche unterscheiden, deshalb eine einfarbige Skala mit steigender Sättigung statt Rot-nach-Grün.
+Die Heatmap zeigt pro Kalendertag die Anzahl richtiger Karten in fünf Intensitätsstufen, ebenfalls geräteweit über alle Stapel summiert. Auf dem Smartphone werden zwölf Wochen dargestellt, auf größeren Bildschirmen 26 Wochen, beides seitlich scrollbar. Jede Zelle nennt beim Antippen Datum, richtige und falsche Karten. Wichtig ist die Farbwahl: die Stufen müssen sich auch bei Rot-Grün-Schwäche unterscheiden, deshalb eine einfarbige Skala mit steigender Sättigung statt Rot-nach-Grün.
 
-Ergänzend zeigt das Dashboard die Verteilung aller Karten auf die fünf Kästen als Balken, die aktuelle Größe der Reparaturkiste und die Gesamtzahl der Karten.
+Ergänzend zeigt das Dashboard die Verteilung der Karten des aktiven Stapels auf die fünf Kästen als Balken, die aktuelle Größe seiner Reparaturkiste und seine Gesamtzahl an Karten – das bleibt zwangsläufig je Stapel, weil Kastenstände an einzelnen Karten hängen und ein Stapel-übergreifender Balken sonst nur Sprachen vermischen würde, die nichts miteinander zu tun haben.
 
 ## 5. Editor
 
@@ -44,19 +46,21 @@ Die Kartenliste bietet Suche, Filter nach Kasten, Reparaturkiste und Markierung,
 
 ## 6. Datenmodell
 
-Alles liegt in einem einzigen JSON-Dokument, das identisch für lokale Speicherung, Export und späteren Sync verwendet wird.
+Alles liegt in einem einzigen JSON-Dokument, das identisch für lokale Speicherung, Export und späteren Sync verwendet wird. Ein Profil enthält mehrere Stapel (`decks[]`); jede Karte und jede Sitzung gehört über `deckId` zu genau einem davon. `days[]` bleibt bewusst ohne `deckId` – die Lernserie und die Heatmap sind geräteweite, stapelübergreifende Statistik (siehe Kapitel 4).
 
 | Feld | Inhalt |
 |---|---|
-| `schema` | Versionsnummer für Migrationen |
-| `profile` | Anzeigename, Oberflächensprache, Einstellungen |
-| `deck` | Name, Bezeichnung Sprache A und B |
-| `cards[]` | `id`, `a`, `b`, `box`, `streak`, `repair`, `marked`, `seen`, `correct`, `wrong`, `lastSeen`, `changed` |
-| `days[]` | Datum, richtige und falsche Karten, Lerndauer in Sekunden |
-| `sessions[]` | Datum, Modus, Richtung, Ziel, Ergebnis |
+| `schema` | Versionsnummer für Migrationen (2: mehrere Stapel) |
+| `profile` | Anzeigename, Oberflächensprache, `activeDeckId` (zuletzt gewählter Stapel) |
+| `decks[]` | `id`, `name`, Bezeichnung Sprache A und B, `changed` |
+| `cards[]` | `id`, `deckId`, `a`, `b`, `box`, `streak`, `repair`, `marked`, `seen`, `correct`, `wrong`, `lastSeen`, `changed` |
+| `days[]` | Datum, richtige und falsche Karten, Lerndauer in Sekunden – geräteweit, nicht je Stapel |
+| `sessions[]` | Datum, Modus, `deckId`, Richtung, Ziel, Ergebnis |
 | `meta` | Erstellung, letzte Sicherung, App-Version |
 
-Karten-IDs sind kurze Zufallszeichenketten, damit zwei Geräte unabhängig Karten anlegen können, ohne zu kollidieren. Ein Datensatz mit 1000 Karten liegt grob bei 120 bis 150 Kilobyte unkomprimiert; das ist für jede der vorgesehenen Speicherarten unkritisch.
+Karten-IDs sind kurze Zufallszeichenketten, damit zwei Geräte unabhängig Karten anlegen können, ohne zu kollidieren; Stapel-IDs folgen demselben Muster. Ein Datensatz mit 1000 Karten liegt grob bei 120 bis 150 Kilobyte unkomprimiert; das ist für jede der vorgesehenen Speicherarten unkritisch, auch mit mehreren Stapeln in einer Datei.
+
+Schema 1 (ein einzelnes `deck`-Objekt statt `decks[]`, Karten ohne `deckId`) wird beim Import automatisch migriert: der bisherige Stapel wird zu `decks[0]`, alle vorhandenen Karten erhalten dessen `deckId`, `profile.activeDeckId` zeigt darauf. Bestehende Exportdateien bleiben also lesbar.
 
 ## 7. Speicherung und Sicherung
 
@@ -75,6 +79,8 @@ Das setzt voraus, dass nichts aus dem Netz nachgeladen wird: keine Bibliothek vo
 ## 9. Oberfläche
 
 Gestaltungslinie ist ruhig und sachlich, mit klarer Typografie und starkem Kontrast; Textkontrast mindestens 4,5 zu 1, interaktive Flächen mindestens 44 Pixel Kantenlänge, was über dem Mindestwert von 24 Pixeln aus WCAG 2.2 liegt und den Empfehlungen von Apple mit 44 Punkt und Material Design mit 48 dp entspricht. Helles und dunkles Erscheinungsbild folgen der Systemeinstellung und lassen sich überschreiben.
+
+Der Kopfbereich trägt eine Stapel-Auswahl (welcher der mehreren Stapel gerade aktiv ist) mit einer Schaltfläche daneben, um direkt dort einen neuen Stapel anzulegen; Umbenennen und Löschen vorhandener Stapel liegt in den Einstellungen, zusammen mit den anderen profilweiten, stapelunabhängigen Voreinstellungen.
 
 Die Lernansicht zeigt die Karte groß und zentriert, die Bedienelemente unten im Daumenbereich. Umdrehen geschieht durch Tippen auf die Karte oder durch die Leertaste, Bewerten durch zwei deutlich getrennte Flächen oder die Pfeiltasten. Wischgesten sind eine zusätzliche Abkürzung, niemals der einzige Weg, da WCAG 2.2 für Ziehbewegungen eine Tippalternative verlangt. Bewegungsanimationen respektieren die Systemeinstellung für reduzierte Bewegung.
 

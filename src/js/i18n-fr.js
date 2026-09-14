@@ -19,6 +19,8 @@ export const dictFr = {
   'header.lastBackupNever': 'jamais',
   'header.lastBackup': 'Dernière sauvegarde : {date}',
   'header.save': 'Sauvegarder',
+  'header.deckSwitcherLabel': 'Paquet actif',
+  'header.newDeckAria': 'Créer un nouveau paquet',
 
   'common.empty': '(vide)',
   'common.cancel': 'Annuler',
@@ -47,6 +49,10 @@ export const dictFr = {
   'settings.themeLight': 'Clair',
   'settings.themeDark': 'Sombre',
   'settings.languageLegend': "Langue de l'interface",
+  'settings.deckManageHeading': 'Gérer les paquets',
+  'settings.editDeckAria': 'Modifier « {name} »',
+  'settings.deleteDeckAria': 'Supprimer « {name} »',
+  'settings.deckDeletedToast': 'Paquet « {name} » supprimé.',
 
   'stats.streakHeading': "Série d'apprentissage",
   'stats.streakDays': (p) => (p.n <= 1 ? 'jour de suite' : 'jours de suite'),
@@ -65,7 +71,7 @@ export const dictFr = {
   'stats.weekdaySun': 'di',
   'stats.legendLess': 'Moins',
   'stats.legendMore': 'Plus',
-  'stats.boxHeading': 'Répartition par case',
+  'stats.boxHeading': 'Répartition par case – {deck}',
   'stats.boxLabel': 'Case {n}',
   'stats.totals': (p) => `${p.total} ${cardWordFr(p.total)} au total, dont ${p.repair} dans la case de réparation.`,
 
@@ -99,7 +105,7 @@ export const dictFr = {
   'cards.frontLabel': 'Recto',
   'cards.backLabel': 'Verso',
 
-  'capture.heading': 'Saisie rapide',
+  'capture.heading': 'Saisie rapide – {deck}',
   'capture.hint':
     "Une ligne pour le recto, la suivante pour le verso, en alternance. Les lignes vides ne font que séparer visuellement. Une ligne contenant une tabulation forme une carte à elle seule (recto tabulation verso).",
   'capture.summary': (p) => `${p.n} ${cardWordFr(p.n)} vont être créées.`,
@@ -178,7 +184,7 @@ export const dictFr = {
   'testgoal.labelAccuracy': "{value} % de réussite à partir de {minCards} cartes",
 
   'import.heading': 'Importer des cartes',
-  'import.csvHeading': "Depuis un fichier CSV",
+  'import.csvHeading': 'Depuis un fichier CSV – {deck}',
   'import.csvFileLabel': 'Choisir un fichier CSV',
   'import.colALabel': 'Colonne pour {lang} : ',
   'import.colBLabel': 'Colonne pour {lang} : ',
@@ -209,6 +215,8 @@ export const dictFr = {
   'toast.backupDownloaded': 'Sauvegarde téléchargée.',
 
   'errors.deckNameRequired': "Le paquet a besoin d'un nom.",
+  'errors.cardDeckRequired': 'Il manque le paquet de la carte.',
+  'errors.lastDeckRequired': 'Au moins un paquet doit rester.',
   'errors.langARequired': 'La langue A manque.',
   'errors.langBRequired': 'La langue B manque.',
   'errors.frontRequired': 'Le recto manque.',

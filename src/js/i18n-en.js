@@ -18,6 +18,8 @@ export const dictEn = {
   'header.lastBackupNever': 'never',
   'header.lastBackup': 'Last backed up: {date}',
   'header.save': 'Back up',
+  'header.deckSwitcherLabel': 'Active deck',
+  'header.newDeckAria': 'Create a new deck',
 
   'common.empty': '(empty)',
   'common.cancel': 'Cancel',
@@ -46,6 +48,10 @@ export const dictEn = {
   'settings.themeLight': 'Light',
   'settings.themeDark': 'Dark',
   'settings.languageLegend': 'Interface language',
+  'settings.deckManageHeading': 'Manage decks',
+  'settings.editDeckAria': 'Edit “{name}”',
+  'settings.deleteDeckAria': 'Delete “{name}”',
+  'settings.deckDeletedToast': 'Deck “{name}” deleted.',
 
   'stats.streakHeading': 'Learning streak',
   'stats.streakDays': (p) => (p.n === 1 ? 'day in a row' : 'days in a row'),
@@ -64,7 +70,7 @@ export const dictEn = {
   'stats.weekdaySun': 'Su',
   'stats.legendLess': 'Less',
   'stats.legendMore': 'More',
-  'stats.boxHeading': 'Box distribution',
+  'stats.boxHeading': 'Box distribution – {deck}',
   'stats.boxLabel': 'Box {n}',
   'stats.totals': (p) => `${p.total} ${cardWordEn(p.total)} in total, ${p.repair} of them in the repair box.`,
 
@@ -98,7 +104,7 @@ export const dictEn = {
   'cards.frontLabel': 'Front',
   'cards.backLabel': 'Back',
 
-  'capture.heading': 'Quick add',
+  'capture.heading': 'Quick add – {deck}',
   'capture.hint':
     'One line for the front, the next for the back, alternating. Blank lines are just visual separators. A line containing a tab forms a card by itself (front tab back).',
   'capture.summary': (p) => `${p.n} ${cardWordEn(p.n)} will be created.`,
@@ -177,7 +183,7 @@ export const dictEn = {
   'testgoal.labelAccuracy': '{value}% accuracy from {minCards} cards',
 
   'import.heading': 'Import cards',
-  'import.csvHeading': 'From a CSV file',
+  'import.csvHeading': 'From a CSV file – {deck}',
   'import.csvFileLabel': 'Choose CSV file',
   'import.colALabel': 'Column for {lang}: ',
   'import.colBLabel': 'Column for {lang}: ',
@@ -207,6 +213,8 @@ export const dictEn = {
   'toast.backupDownloaded': 'Backup downloaded.',
 
   'errors.deckNameRequired': 'The deck needs a name.',
+  'errors.cardDeckRequired': 'The card is missing its deck.',
+  'errors.lastDeckRequired': 'At least one deck must remain.',
   'errors.langARequired': 'Language A is missing.',
   'errors.langBRequired': 'Language B is missing.',
   'errors.frontRequired': 'Front is missing.',

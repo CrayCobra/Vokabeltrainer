@@ -1,0 +1,11 @@
+{
+  "name": "vokabeltrainer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Digitaler Karteikasten, lokal und ohne externe Laufzeitabhängigkeiten.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

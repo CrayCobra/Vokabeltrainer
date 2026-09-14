@@ -6,7 +6,7 @@
 // modulfreien Skript zusammengefügt) und unterscheiden sich nur in
 // Installierbarkeit und Offline-Cache.
 
-import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -25,10 +25,43 @@ const MODULE_ORDER = [
   'fileio.js',
   'storage.js',
   'learn.js',
+  'testgoal.js',
   'bufferedwriter.js',
   'views.js',
   'app.js',
 ];
+
+// Prüft vor dem Bündeln, dass MODULE_ORDER weder eine Datei aus src/js/ vergisst noch eine
+// nicht mehr vorhandene nennt, und dass jedes import-Ziel vor der importierenden Datei steht.
+// Ein vergessener Eintrag hier führt sonst nicht zu einem Fehler beim Bauen, sondern zu einem
+// "X is not defined" erst zur Laufzeit im Browser – genau das ist einmal passiert (testgoal.js
+// fehlte), unbemerkt von den node:test-Tests, die echte ES-Module statt des Bündels prüfen.
+async function validateModuleGraph() {
+  const files = (await readdir(path.join(SRC, 'js'))).filter((f) => f.endsWith('.js'));
+  const missingFromOrder = files.filter((f) => !MODULE_ORDER.includes(f));
+  const staleInOrder = MODULE_ORDER.filter((f) => !files.includes(f));
+  if (missingFromOrder.length > 0) {
+    throw new Error(`Diese Dateien in src/js/ fehlen in MODULE_ORDER: ${missingFromOrder.join(', ')}`);
+  }
+  if (staleInOrder.length > 0) {
+    throw new Error(`MODULE_ORDER nennt Dateien, die es in src/js/ nicht (mehr) gibt: ${staleInOrder.join(', ')}`);
+  }
+
+  const indexOf = new Map(MODULE_ORDER.map((name, i) => [name, i]));
+  for (const [i, name] of MODULE_ORDER.entries()) {
+    const raw = await readFile(path.join(SRC, 'js', name), 'utf8');
+    const importMatches = raw.matchAll(/^import\s+\{[^}]*\}\s+from\s+['"]\.\/([^'"]+)['"];\s*$/gm);
+    for (const match of importMatches) {
+      const dep = match[1];
+      if (!indexOf.has(dep)) {
+        throw new Error(`${name} importiert './${dep}', das nicht in MODULE_ORDER steht.`);
+      }
+      if (indexOf.get(dep) >= i) {
+        throw new Error(`${name} importiert './${dep}', das in MODULE_ORDER erst an gleicher Stelle oder später folgt.`);
+      }
+    }
+  }
+}
 
 function stripModuleSyntax(source) {
   return source
@@ -157,6 +190,7 @@ async function buildPages(script, css, version) {
 }
 
 async function main() {
+  await validateModuleGraph();
   const version = await readVersion();
   const css = await readFile(path.join(SRC, 'app.css'), 'utf8');
   const script = await bundleScript(version);

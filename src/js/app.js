@@ -7,9 +7,11 @@ import { createBufferedWriter } from './bufferedwriter.js';
 import { renderOnboarding, renderShell } from './views.js';
 import { icons } from './icons.js';
 import { serializeDocument, buildExportFilename } from './fileio.js';
-import { recordSession } from './model.js';
+import { recordSession, nowIso } from './model.js';
+import { createSessionQueue } from './learn.js';
+import { describeGoalProgress } from './testgoal.js';
 
-const VIEWS = ['karten', 'erfassen', 'import', 'lernen'];
+const VIEWS = ['karten', 'erfassen', 'import', 'lernen', 'testen'];
 
 function freshCardsSession() {
   return {
@@ -54,6 +56,7 @@ export async function startApp(root) {
     view: viewFromHash(),
     cardsSession: freshCardsSession(),
     learnSession: null,
+    testSession: null,
   };
 
   function showToast({ message, actionLabel, onAction, duration = 7000 }) {
@@ -139,6 +142,24 @@ export async function startApp(root) {
     await writer.flush();
   }
 
+  function startLearnSession({ order, direction, onlyMarked, cardIds }) {
+    if (cardIds.length === 0) return;
+    const queue = createSessionQueue(cardIds);
+    state.learnSession = {
+      order,
+      direction,
+      onlyMarked,
+      queue,
+      startedAt: nowIso(),
+      startMs: Date.now(),
+      correctCount: 0,
+      wrongCount: 0,
+      currentCardId: queue.draw(),
+      finished: false,
+    };
+    render();
+  }
+
   async function endLearnSession(ls) {
     await flushPersistence();
     if (ls.correctCount + ls.wrongCount > 0) {
@@ -161,6 +182,133 @@ export async function startApp(root) {
       ls.finished = true;
     } else {
       state.learnSession = null;
+    }
+  }
+
+  // Startet eine Übungsrunde mit einer vorgegebenen Kartenmenge (etwa den falsch
+  // beantworteten Karten eines Tests) und wechselt sofort und synchron in die Lernansicht,
+  // statt auf das asynchrone hashchange-Ereignis zu warten.
+  function startPracticeForWrongCards(cardIds, direction) {
+    if (cardIds.length === 0) return;
+    state.testSession = null;
+    state.view = 'lernen';
+    state.cardsSession = freshCardsSession();
+    location.hash = 'lernen';
+    startLearnSession({ order: 'sequential', direction, onlyMarked: false, cardIds });
+  }
+
+  // ---- Testmodus: Zielarten, Pause/Verlängern für Zeitziele ----
+
+  function testSessionStats(ts) {
+    return { correctCount: ts.correctCount, wrongCount: ts.wrongCount, elapsedMs: testElapsedMs(ts) };
+  }
+
+  function testElapsedMs(ts) {
+    return ts.elapsedMs + (ts.paused || !ts.runningSince ? 0 : Date.now() - ts.runningSince);
+  }
+
+  function stopTestTicking(ts) {
+    if (ts.timerId != null) {
+      clearInterval(ts.timerId);
+      ts.timerId = null;
+    }
+  }
+
+  // Aktualisiert die Fortschrittsanzeige eines laufenden Zeitziels einmal pro Sekunde, ohne
+  // die ganze Ansicht neu aufzubauen – das Intervall lebt in state.testSession und damit
+  // unabhängig von ctx.render(), sonst würde jedes Rendern (etwa nach einer Bewertung) ein
+  // weiteres, nie beendetes Intervall erzeugen.
+  function startTestTicking(ts) {
+    stopTestTicking(ts);
+    if (ts.goal.type !== 'duration') return;
+    ts.timerId = setInterval(() => {
+      const progressEl = document.getElementById('test-progress');
+      if (!progressEl) {
+        stopTestTicking(ts);
+        return;
+      }
+      const progress = describeGoalProgress(ts.goal, testSessionStats(ts));
+      progressEl.textContent = progress.text;
+      const badge = document.getElementById('test-goal-badge');
+      if (badge) badge.hidden = !progress.reached;
+    }, 1000);
+  }
+
+  function startTestSession({ order, direction, onlyMarked, goal, cardIds }) {
+    if (cardIds.length === 0) return;
+    const queue = createSessionQueue(cardIds);
+    const ts = {
+      order,
+      direction,
+      onlyMarked,
+      goal,
+      queue,
+      startedAt: nowIso(),
+      correctCount: 0,
+      wrongCount: 0,
+      currentCardId: queue.draw(),
+      finished: false,
+      paused: false,
+      elapsedMs: 0,
+      runningSince: Date.now(),
+      timerId: null,
+      wrongCardIds: new Set(),
+    };
+    state.testSession = ts;
+    startTestTicking(ts);
+    render();
+  }
+
+  function pauseTestSession() {
+    const ts = state.testSession;
+    if (!ts || ts.paused) return;
+    ts.elapsedMs = testElapsedMs(ts);
+    ts.paused = true;
+    ts.runningSince = null;
+    stopTestTicking(ts);
+    render();
+  }
+
+  function resumeTestSession() {
+    const ts = state.testSession;
+    if (!ts || !ts.paused) return;
+    ts.paused = false;
+    ts.runningSince = Date.now();
+    startTestTicking(ts);
+    render();
+  }
+
+  function extendTestSession(extraSeconds) {
+    const ts = state.testSession;
+    if (!ts || ts.goal.type !== 'duration') return;
+    ts.goal = { ...ts.goal, value: ts.goal.value + extraSeconds };
+    render();
+  }
+
+  async function endTestSession(ts) {
+    stopTestTicking(ts);
+    await flushPersistence();
+    if (ts.correctCount + ts.wrongCount > 0) {
+      const seconds = Math.max(0, Math.round(testElapsedMs(ts) / 1000));
+      const session = {
+        date: ts.startedAt,
+        mode: 'test',
+        order: ts.order,
+        direction: ts.direction,
+        goal: ts.goal,
+        correct: ts.correctCount,
+        wrong: ts.wrongCount,
+        seconds,
+      };
+      try {
+        await persist(recordSession(doc, session));
+      } catch {
+        // persist zeigt einen Fehler bereits als Toast; die Kastenstände der einzelnen
+        // Karten sind unabhängig davon schon gespeichert.
+      }
+      ts.finished = true;
+    } else {
+      state.testSession = null;
     }
   }
 
@@ -193,7 +341,15 @@ export async function startApp(root) {
     persist,
     persistBuffered,
     flushPersistence,
+    startLearnSession,
     endLearnSession,
+    startPracticeForWrongCards,
+    startTestSession,
+    pauseTestSession,
+    resumeTestSession,
+    extendTestSession,
+    endTestSession,
+    testSessionStats,
     setInitialDoc,
     showToast,
     exportDocument,
@@ -203,17 +359,34 @@ export async function startApp(root) {
     refreshHeaderCount() {},
   };
 
-  window.addEventListener('hashchange', () => {
-    const next = viewFromHash();
-    if (next === state.view) return;
-    if (state.view === 'lernen' && state.learnSession && !state.learnSession.finished) {
-      const ls = state.learnSession;
+  function leaveLearnView() {
+    const ls = state.learnSession;
+    if (ls && !ls.finished) {
       endLearnSession(ls).finally(() => {
         if (state.learnSession === ls) state.learnSession = null;
       });
     } else {
       state.learnSession = null;
     }
+  }
+
+  function leaveTestView() {
+    const ts = state.testSession;
+    if (ts) stopTestTicking(ts);
+    if (ts && !ts.finished) {
+      endTestSession(ts).finally(() => {
+        if (state.testSession === ts) state.testSession = null;
+      });
+    } else {
+      state.testSession = null;
+    }
+  }
+
+  window.addEventListener('hashchange', () => {
+    const next = viewFromHash();
+    if (next === state.view) return;
+    if (state.view === 'lernen') leaveLearnView();
+    if (state.view === 'testen') leaveTestView();
     state.view = next;
     state.cardsSession = freshCardsSession();
     render();

@@ -74,6 +74,17 @@ test('createSessionQueue: requeue bei sehr kurzer Restwarteschlange reiht sofort
   assert.equal(queue.isEmpty(), true);
 });
 
+test('createSessionQueue: enqueueMany füllt eine leere Warteschlange erneut auf (Testmodus-Wiederholung)', () => {
+  const queue = createSessionQueue(['a', 'b']);
+  queue.draw();
+  queue.draw();
+  assert.equal(queue.isEmpty(), true);
+  queue.enqueueMany(['c', 'd', 'e']);
+  const rest = [];
+  while (!queue.isEmpty()) rest.push(queue.draw());
+  assert.deepEqual(rest, ['c', 'd', 'e']);
+});
+
 test('createSessionQueue: remove entfernt eine ausstehende Wiedervorlage (Korrektur falsch → richtig)', () => {
   const queue = createSessionQueue(['a', 'b', 'c']);
   queue.draw();

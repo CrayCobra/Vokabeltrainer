@@ -16,12 +16,12 @@ import {
   restoreCards,
   findDuplicateFronts,
   mergeDocuments,
-  nowIso,
 } from './model.js';
 import { parseQuickCapture } from './capture.js';
 import { decodeCsvBytes, detectDelimiter, parseCsv, rowsToCards } from './csv.js';
 import { parseImportedText } from './fileio.js';
-import { buildQueue, createSessionQueue } from './learn.js';
+import { buildQueue } from './learn.js';
+import { describeGoalProgress, describeGoalLabel, formatDuration } from './testgoal.js';
 
 function debounce(fn, wait) {
   let t;
@@ -137,6 +137,7 @@ export function renderShell(root, ctx) {
     { class: 'main-nav', 'aria-label': 'Bereiche' },
     [
       { view: 'lernen', label: 'Lernen' },
+      { view: 'testen', label: 'Testen' },
       { view: 'karten', label: 'Karten' },
       { view: 'erfassen', label: 'Erfassen' },
       { view: 'import', label: 'Import' },
@@ -183,6 +184,7 @@ export function renderShell(root, ctx) {
   if (ctx.state.view === 'karten') renderCardsView(main, ctx);
   else if (ctx.state.view === 'erfassen') renderCaptureView(main, ctx);
   else if (ctx.state.view === 'import') renderImportView(main, ctx);
+  else if (ctx.state.view === 'testen') renderTestView(main, ctx);
   else renderLearnView(main, ctx);
 }
 
@@ -570,21 +572,66 @@ export function renderLearnView(container, ctx) {
   else renderLearnSession(container, ctx);
 }
 
-function renderLearnSetup(container, ctx) {
-  const deck = ctx.doc.deck;
-  let order = 'random';
+// Gemeinsame Felder für Richtung, Reihenfolge und den Markierungsfilter, genutzt von
+// Lern- und Testsitzungs-Einrichtung. idPrefix hält die Radio-IDs beider Ansichten auseinander.
+function buildSessionOptionFields(deck, idPrefix, onChange) {
   let direction = 'ab';
+  let order = 'random';
   let onlyMarked = false;
 
+  const directionField = el('fieldset', {}, [
+    el('legend', {}, 'Richtung'),
+    radioOption(`${idPrefix}-direction`, 'ab', `${deck.langA} → ${deck.langB}`, true),
+    radioOption(`${idPrefix}-direction`, 'ba', `${deck.langB} → ${deck.langA}`, false),
+  ]);
+  directionField.addEventListener('change', (e) => {
+    direction = e.target.value;
+    onChange();
+  });
+
+  const orderField = el('fieldset', {}, [
+    el('legend', {}, 'Reihenfolge'),
+    radioOption(`${idPrefix}-order`, 'random', 'Zufällig', true),
+    radioOption(`${idPrefix}-order`, 'sequential', 'Eingabereihenfolge', false),
+    radioOption(`${idPrefix}-order`, 'box', 'Nach Kästen (aufsteigend)', false),
+  ]);
+  orderField.addEventListener('change', (e) => {
+    order = e.target.value;
+    onChange();
+  });
+
+  const markedCheckbox = el('input', { type: 'checkbox', id: `${idPrefix}-only-marked` });
+  markedCheckbox.addEventListener('change', (e) => {
+    onlyMarked = e.target.checked;
+    onChange();
+  });
+  const markedField = el('div', { class: 'field-row' }, [
+    el('label', {}, [markedCheckbox, ' Nur markierte Karten']),
+  ]);
+
+  return {
+    directionField,
+    orderField,
+    markedField,
+    get direction() {
+      return direction;
+    },
+    get order() {
+      return order;
+    },
+    get onlyMarked() {
+      return onlyMarked;
+    },
+  };
+}
+
+function renderLearnSetup(container, ctx) {
+  const deck = ctx.doc.deck;
   const countText = el('p', { class: 'hint' });
   const startBtn = el('button', { type: 'button', class: 'btn btn-primary' }, 'Sitzung starten');
 
-  function selectableCards() {
-    return onlyMarked ? ctx.doc.cards.filter((c) => c.marked) : ctx.doc.cards;
-  }
-
   function updateCount() {
-    const cards = selectableCards();
+    const cards = fields.onlyMarked ? ctx.doc.cards.filter((c) => c.marked) : ctx.doc.cards;
     const repairCount = cards.filter((c) => c.repair).length;
     if (ctx.doc.cards.length === 0) {
       countText.textContent = 'Noch keine Karten. Lege welche über „Erfassen“ oder „Import“ an.';
@@ -596,49 +643,12 @@ function renderLearnSetup(container, ctx) {
     startBtn.disabled = cards.length === 0;
   }
 
-  const directionField = el('fieldset', {}, [
-    el('legend', {}, 'Richtung'),
-    radioOption('learn-direction', 'ab', `${deck.langA} → ${deck.langB}`, true),
-    radioOption('learn-direction', 'ba', `${deck.langB} → ${deck.langA}`, false),
-  ]);
-  directionField.addEventListener('change', (e) => {
-    direction = e.target.value;
-  });
-
-  const orderField = el('fieldset', {}, [
-    el('legend', {}, 'Reihenfolge'),
-    radioOption('learn-order', 'random', 'Zufällig', true),
-    radioOption('learn-order', 'sequential', 'Eingabereihenfolge', false),
-    radioOption('learn-order', 'box', 'Nach Kästen (aufsteigend)', false),
-  ]);
-  orderField.addEventListener('change', (e) => {
-    order = e.target.value;
-  });
-
-  const markedCheckbox = el('input', { type: 'checkbox', id: 'learn-only-marked' });
-  markedCheckbox.addEventListener('change', (e) => {
-    onlyMarked = e.target.checked;
-    updateCount();
-  });
+  const fields = buildSessionOptionFields(deck, 'learn', updateCount);
 
   startBtn.addEventListener('click', () => {
-    const ids = buildQueue(ctx.doc.cards, { order, onlyMarked });
-    if (ids.length === 0) return;
-    const queue = createSessionQueue(ids);
-    ctx.state.learnSession = {
-      order,
-      direction,
-      onlyMarked,
-      queue,
-      startedAt: nowIso(),
-      startMs: Date.now(),
-      correctCount: 0,
-      wrongCount: 0,
-      currentCardId: queue.draw(),
-      flipped: false,
-      finished: false,
-    };
-    ctx.render();
+    const { order, direction, onlyMarked } = fields;
+    const cardIds = buildQueue(ctx.doc.cards, { order, onlyMarked });
+    ctx.startLearnSession({ order, direction, onlyMarked, cardIds });
   });
 
   updateCount();
@@ -646,11 +656,9 @@ function renderLearnSetup(container, ctx) {
   container.append(
     el('section', { 'aria-labelledby': 'learn-heading' }, [
       el('h2', { id: 'learn-heading' }, 'Lernsitzung einrichten'),
-      directionField,
-      orderField,
-      el('div', { class: 'field-row' }, [
-        el('label', {}, [markedCheckbox, ' Nur markierte Karten']),
-      ]),
+      fields.directionField,
+      fields.orderField,
+      fields.markedField,
       countText,
       startBtn,
     ])
@@ -701,9 +709,60 @@ async function rateCurrentCard(ctx, ls, correct) {
     await ctx.endLearnSession(ls);
   } else {
     ls.currentCardId = ls.queue.draw();
-    ls.flipped = false;
   }
   ctx.render();
+}
+
+// Baut die Umdreh-Karte samt Bewertungsflächen: Tippen/Leertaste dreht um, danach bewerten
+// über zwei getrennte Flächen oder die Pfeiltasten. Wird von Lern- und Testsitzung geteilt,
+// da sich beide nur in Warteschlangen-Verwaltung und Rahmen (Fortschritt, Ziel) unterscheiden.
+function buildFlipCard({ card, direction, deck, onRate }) {
+  const frontLabel = direction === 'ab' ? deck.langA : deck.langB;
+  const backLabel = direction === 'ab' ? deck.langB : deck.langA;
+  const frontText = direction === 'ab' ? card.a : card.b;
+  const backText = direction === 'ab' ? card.b : card.a;
+
+  let flipped = false;
+
+  const faceLabel = el('p', { class: 'learn-face-label' }, frontLabel);
+  const faceText = el('p', { class: 'learn-face-text' }, frontText || '(leer)');
+  const cardBtn = el(
+    'button',
+    { type: 'button', class: 'learn-card', 'aria-label': 'Karte umdrehen (Leertaste)' },
+    [faceLabel, faceText]
+  );
+
+  const wrongBtn = el(
+    'button',
+    { type: 'button', class: 'btn btn-danger learn-rate', onclick: () => onRate(false) },
+    'Falsch'
+  );
+  const rightBtn = el(
+    'button',
+    { type: 'button', class: 'btn btn-primary learn-rate', onclick: () => onRate(true) },
+    'Richtig'
+  );
+  const rateRow = el('div', { class: 'learn-rate-row', hidden: true }, [wrongBtn, rightBtn]);
+
+  function showFace() {
+    faceLabel.textContent = flipped ? backLabel : frontLabel;
+    faceText.textContent = (flipped ? backText : frontText) || '(leer)';
+    rateRow.hidden = !flipped;
+  }
+
+  cardBtn.addEventListener('click', () => {
+    flipped = !flipped;
+    showFace();
+    if (flipped) wrongBtn.focus();
+  });
+
+  function handleKeydown(e) {
+    if (!flipped) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); onRate(true); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); onRate(false); }
+  }
+
+  return { cardBtn, rateRow, handleKeydown, focus: () => cardBtn.focus() };
 }
 
 function renderLearnSession(container, ctx) {
@@ -723,51 +782,12 @@ function renderLearnSession(container, ctx) {
     return;
   }
 
-  const frontLabel = ls.direction === 'ab' ? deck.langA : deck.langB;
-  const backLabel = ls.direction === 'ab' ? deck.langB : deck.langA;
-  const frontText = ls.direction === 'ab' ? card.a : card.b;
-  const backText = ls.direction === 'ab' ? card.b : card.a;
+  const flip = buildFlipCard({ card, direction: ls.direction, deck, onRate: (correct) => rateCurrentCard(ctx, ls, correct) });
 
-  let flipped = false;
-
-  const faceLabel = el('p', { class: 'learn-face-label' }, frontLabel);
-  const faceText = el('p', { class: 'learn-face-text' }, frontText || '(leer)');
-  const cardBtn = el(
-    'button',
-    { type: 'button', class: 'learn-card', 'aria-label': 'Karte umdrehen (Leertaste)' },
-    [faceLabel, faceText]
-  );
-
-  const wrongBtn = el(
-    'button',
-    { type: 'button', class: 'btn btn-danger learn-rate', onclick: () => rateCurrentCard(ctx, ls, false) },
-    'Falsch'
-  );
-  const rightBtn = el(
-    'button',
-    { type: 'button', class: 'btn btn-primary learn-rate', onclick: () => rateCurrentCard(ctx, ls, true) },
-    'Richtig'
-  );
-  const rateRow = el('div', { class: 'learn-rate-row', hidden: true }, [wrongBtn, rightBtn]);
-
-  function showFace() {
-    faceLabel.textContent = flipped ? backLabel : frontLabel;
-    faceText.textContent = (flipped ? backText : frontText) || '(leer)';
-    rateRow.hidden = !flipped;
-  }
-
-  cardBtn.addEventListener('click', () => {
-    flipped = !flipped;
-    showFace();
-    if (flipped) wrongBtn.focus();
-  });
-
-  const section = el('section', { 'aria-labelledby': 'learn-heading' });
-  section.addEventListener('keydown', (e) => {
-    if (!flipped) return;
-    if (e.key === 'ArrowRight') { e.preventDefault(); rateCurrentCard(ctx, ls, true); }
-    if (e.key === 'ArrowLeft') { e.preventDefault(); rateCurrentCard(ctx, ls, false); }
-  });
+  const section = el('section', { 'aria-labelledby': 'learn-heading' }, [
+    el('h2', { id: 'learn-heading', class: 'visually-hidden' }, 'Lernsitzung'),
+  ]);
+  section.addEventListener('keydown', flip.handleKeydown);
 
   const progress = el(
     'p',
@@ -791,12 +811,12 @@ function renderLearnSession(container, ctx) {
       ),
       progress,
     ]),
-    cardBtn,
-    rateRow
+    flip.cardBtn,
+    flip.rateRow
   );
 
   container.append(section);
-  cardBtn.focus();
+  flip.focus();
 }
 
 function renderLearnSummary(container, ctx) {
@@ -824,6 +844,321 @@ function renderLearnSummary(container, ctx) {
           'Zur Kartenliste'
         ),
       ]),
+    ])
+  );
+}
+
+// ---------- Testen ----------
+
+export function renderTestView(container, ctx) {
+  const ts = ctx.state.testSession;
+  if (!ts) renderTestSetup(container, ctx);
+  else if (ts.finished) renderTestSummary(container, ctx);
+  else renderTestSession(container, ctx);
+}
+
+function renderTestSetup(container, ctx) {
+  const deck = ctx.doc.deck;
+  const countText = el('p', { class: 'hint' });
+  const startBtn = el('button', { type: 'button', class: 'btn btn-primary' }, 'Test starten');
+
+  function updateAll() {
+    const cards = fields.onlyMarked ? ctx.doc.cards.filter((c) => c.marked) : ctx.doc.cards;
+    if (ctx.doc.cards.length === 0) {
+      countText.textContent = 'Noch keine Karten. Lege welche über „Erfassen“ oder „Import“ an.';
+    } else if (cards.length === 0) {
+      countText.textContent = 'Keine markierten Karten vorhanden.';
+    } else {
+      countText.textContent = `${cards.length} Karte${cards.length === 1 ? '' : 'n'} stehen für diesen Test zur Verfügung.`;
+    }
+    startBtn.disabled = cards.length === 0;
+  }
+
+  const fields = buildSessionOptionFields(deck, 'test', updateAll);
+
+  let goalType = 'count';
+  const goalCountInput = el('input', { type: 'number', min: '1', value: '20', id: 'goal-count-value' });
+  const goalDurationInput = el('input', { type: 'number', min: '1', value: '5', id: 'goal-duration-minutes' });
+  const goalAccuracyValueInput = el('input', { type: 'number', min: '1', max: '100', value: '90', id: 'goal-accuracy-value' });
+  const goalAccuracyMinInput = el('input', { type: 'number', min: '1', value: '20', id: 'goal-accuracy-mincards' });
+
+  const countSub = el('div', { class: 'field-row' }, [el('label', {}, ['Anzahl Karten: ', goalCountInput])]);
+  const durationSub = el('div', { class: 'field-row', hidden: true }, [el('label', {}, ['Minuten: ', goalDurationInput])]);
+  const accuracySub = el('div', { class: 'field-row', hidden: true }, [
+    el('label', {}, ['Zielquote (%): ', goalAccuracyValueInput]),
+    el('label', {}, ['Mindestanzahl Karten: ', goalAccuracyMinInput]),
+  ]);
+
+  const goalTypeField = el('fieldset', {}, [
+    el('legend', {}, 'Ziel'),
+    radioOption('test-goal-type', 'count', 'Kartenanzahl', true),
+    radioOption('test-goal-type', 'duration', 'Dauer', false),
+    radioOption('test-goal-type', 'accuracy', 'Trefferquote', false),
+  ]);
+  goalTypeField.addEventListener('change', (e) => {
+    goalType = e.target.value;
+    countSub.hidden = goalType !== 'count';
+    durationSub.hidden = goalType !== 'duration';
+    accuracySub.hidden = goalType !== 'accuracy';
+  });
+
+  function currentGoal() {
+    if (goalType === 'duration') {
+      const minutes = Math.max(1, Number(goalDurationInput.value) || 5);
+      return { type: 'duration', value: minutes * 60 };
+    }
+    if (goalType === 'accuracy') {
+      const value = Math.min(100, Math.max(1, Number(goalAccuracyValueInput.value) || 90));
+      const minCards = Math.max(1, Number(goalAccuracyMinInput.value) || 20);
+      return { type: 'accuracy', value, minCards };
+    }
+    const value = Math.max(1, Number(goalCountInput.value) || 20);
+    return { type: 'count', value };
+  }
+
+  startBtn.addEventListener('click', () => {
+    const { order, direction, onlyMarked } = fields;
+    const cardIds = buildQueue(ctx.doc.cards, { order, onlyMarked });
+    ctx.startTestSession({ order, direction, onlyMarked, goal: currentGoal(), cardIds });
+  });
+
+  updateAll();
+
+  container.append(
+    el('section', { 'aria-labelledby': 'test-heading' }, [
+      el('h2', { id: 'test-heading' }, 'Test einrichten'),
+      fields.directionField,
+      fields.orderField,
+      fields.markedField,
+      goalTypeField,
+      countSub,
+      durationSub,
+      accuracySub,
+      countText,
+      startBtn,
+    ])
+  );
+}
+
+// Zieht die nächste Karte; ist die Warteschlange leer, aber das Ziel noch nicht erreicht,
+// wird der (gefilterte) Kartenbestand erneut aufgebaut – der Testmodus wiederholt den Stapel,
+// bis die Person selbst auswertet, statt bei knappen Stapeln vorzeitig abzubrechen.
+function drawNextTestCard(ctx, ts) {
+  if (ts.queue.isEmpty()) {
+    const refillIds = buildQueue(ctx.doc.cards, { order: ts.order, onlyMarked: ts.onlyMarked });
+    if (refillIds.length === 0) return null;
+    ts.queue.enqueueMany(refillIds);
+  }
+  return ts.queue.draw();
+}
+
+async function rateTestCard(ctx, ts, correct) {
+  const cardId = ts.currentCardId;
+  const previousCard = ctx.doc.cards.find((c) => c.id === cardId);
+  const updated = applyLearningResult(previousCard, correct);
+  ctx.persistBuffered(replaceCard(ctx.doc, updated));
+
+  if (correct) {
+    ts.correctCount += 1;
+  } else {
+    ts.wrongCount += 1;
+    ts.wrongCardIds.add(cardId);
+    ts.queue.requeueAfterWrong(cardId);
+  }
+
+  ctx.showToast({
+    message: describeRatingOutcome(previousCard, updated, correct),
+    actionLabel: 'Korrigieren',
+    duration: 3000,
+    onAction: async () => {
+      const flippedCorrect = !correct;
+      const recorrected = applyLearningResult(previousCard, flippedCorrect);
+      ctx.persistBuffered(replaceCard(ctx.doc, recorrected));
+      if (!ts.finished) {
+        if (correct) {
+          ts.correctCount -= 1;
+          ts.wrongCount += 1;
+          ts.wrongCardIds.add(cardId);
+          ts.queue.requeueAfterWrong(cardId);
+        } else {
+          ts.wrongCount -= 1;
+          ts.correctCount += 1;
+          ts.wrongCardIds.delete(cardId);
+          ts.queue.remove(cardId);
+        }
+        ctx.render();
+      }
+    },
+  });
+
+  const nextId = drawNextTestCard(ctx, ts);
+  if (nextId == null) {
+    await ctx.endTestSession(ts);
+  } else {
+    ts.currentCardId = nextId;
+  }
+  ctx.render();
+}
+
+function renderTestSession(container, ctx) {
+  const ts = ctx.state.testSession;
+  const deck = ctx.doc.deck;
+
+  if (ts.paused) {
+    renderPausedTestSession(container, ctx, ts);
+    return;
+  }
+
+  const card = ctx.doc.cards.find((c) => c.id === ts.currentCardId);
+  if (!card) {
+    const nextId = drawNextTestCard(ctx, ts);
+    if (nextId == null) {
+      ctx.endTestSession(ts).then(() => ctx.render());
+      return;
+    }
+    ts.currentCardId = nextId;
+    ctx.render();
+    return;
+  }
+
+  const flip = buildFlipCard({ card, direction: ts.direction, deck, onRate: (correct) => rateTestCard(ctx, ts, correct) });
+
+  const section = el('section', { 'aria-labelledby': 'test-heading' }, [
+    el('h2', { id: 'test-heading', class: 'visually-hidden' }, 'Test'),
+  ]);
+  section.addEventListener('keydown', flip.handleKeydown);
+
+  const progress = describeGoalProgress(ts.goal, ctx.testSessionStats(ts));
+  const progressText = el('p', { class: 'learn-progress', id: 'test-progress' }, progress.text);
+  const goalBadge = el(
+    'span',
+    { class: 'badge badge-goal-reached', id: 'test-goal-badge', hidden: !progress.reached },
+    'Ziel erreicht ✓'
+  );
+
+  const topActions = [
+    el(
+      'button',
+      {
+        type: 'button',
+        class: 'btn btn-secondary',
+        onclick: async () => {
+          await ctx.endTestSession(ts);
+          ctx.render();
+        },
+      },
+      'Ergebnis anzeigen'
+    ),
+  ];
+  if (ts.goal.type === 'duration') {
+    topActions.push(
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.pauseTestSession() }, 'Pause'),
+      el('button', { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.extendTestSession(120) }, '+2 Minuten')
+    );
+  }
+
+  section.append(
+    el('div', { class: 'learn-top-bar' }, [el('div', { class: 'test-top-actions' }, topActions), progressText, goalBadge]),
+    flip.cardBtn,
+    flip.rateRow
+  );
+
+  container.append(section);
+  flip.focus();
+}
+
+function renderPausedTestSession(container, ctx, ts) {
+  const progress = describeGoalProgress(ts.goal, ctx.testSessionStats(ts));
+  container.append(
+    el('section', { 'aria-labelledby': 'test-heading' }, [
+      el('h2', { id: 'test-heading', class: 'visually-hidden' }, 'Test pausiert'),
+      el('div', { class: 'learn-top-bar' }, [
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'btn btn-secondary',
+            onclick: async () => {
+              await ctx.endTestSession(ts);
+              ctx.render();
+            },
+          },
+          'Ergebnis anzeigen'
+        ),
+        el('p', { class: 'learn-progress' }, progress.text),
+      ]),
+      el('div', { class: 'learn-card test-paused' }, [
+        el('p', { class: 'learn-face-text' }, 'Pausiert'),
+        el('button', { type: 'button', class: 'btn btn-primary', onclick: () => ctx.resumeTestSession() }, 'Weiter'),
+      ]),
+    ])
+  );
+}
+
+function renderTestSummary(container, ctx) {
+  const ts = ctx.state.testSession;
+  const total = ts.correctCount + ts.wrongCount;
+  const rate = total === 0 ? 0 : Math.round((ts.correctCount / total) * 100);
+  const stats = ctx.testSessionStats(ts);
+  const seconds = Math.max(0, Math.round(stats.elapsedMs / 1000));
+  const progress = describeGoalProgress(ts.goal, stats);
+  const wrongCards = ctx.doc.cards.filter((c) => ts.wrongCardIds.has(c.id));
+
+  const wrongList = wrongCards.length
+    ? el(
+        'ul',
+        { class: 'card-list' },
+        wrongCards.map((c) =>
+          el('li', { class: 'card-row' }, [
+            el('span', { class: 'card-text card-text-a' }, c.a || '(leer)'),
+            el('span', { class: 'card-text card-text-b' }, c.b || '(leer)'),
+          ])
+        )
+      )
+    : el('p', { class: 'hint' }, 'Keine falsch beantworteten Karten.');
+
+  container.append(
+    el('section', { 'aria-labelledby': 'test-heading' }, [
+      el('h2', { id: 'test-heading' }, 'Ergebnis'),
+      el('p', {}, `Ziel: ${describeGoalLabel(ts.goal)} — ${progress.reached ? 'erreicht ✓' : 'nicht erreicht.'}`),
+      el('p', {}, `Trefferquote: ${rate}% (${ts.correctCount} von ${total} Karten richtig).`),
+      el('p', {}, `Dauer: ${formatDuration(seconds)} Minuten.`),
+      el('h3', {}, 'Falsch beantwortete Karten'),
+      wrongList,
+      el(
+        'div',
+        { class: 'actions' },
+        [
+          wrongCards.length
+            ? el(
+                'button',
+                {
+                  type: 'button',
+                  class: 'btn btn-primary',
+                  onclick: () => ctx.startPracticeForWrongCards(wrongCards.map((c) => c.id), ts.direction),
+                },
+                'Übungsrunde mit falschen Karten starten'
+              )
+            : null,
+          el(
+            'button',
+            {
+              type: 'button',
+              class: 'btn btn-secondary',
+              onclick: () => {
+                ctx.state.testSession = null;
+                ctx.render();
+              },
+            },
+            'Neuer Test'
+          ),
+          el(
+            'button',
+            { type: 'button', class: 'btn btn-secondary', onclick: () => ctx.navigate('karten') },
+            'Zur Kartenliste'
+          ),
+        ]
+      ),
     ])
   );
 }

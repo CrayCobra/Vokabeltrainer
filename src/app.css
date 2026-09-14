@@ -15,6 +15,8 @@
   --danger-contrast: #ffffff;
   --warning-bg: #fff4e0;
   --warning-border: #c67a00;
+  --success: #1a7f37;
+  --success-contrast: #ffffff;
   --focus-ring: #0a58ca;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
@@ -32,6 +34,8 @@
     --danger-contrast: #2a0b08;
     --warning-bg: #3a2a0a;
     --warning-border: #d99a3a;
+    --success: #4ada6f;
+    --success-contrast: #0a2e12;
     --focus-ring: #6ea8fe;
   }
 }
@@ -454,6 +458,26 @@ legend {
   flex: 1;
   justify-content: center;
   font-size: 1.05rem;
+}
+
+.test-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.badge-goal-reached {
+  background: var(--success);
+  color: var(--success-contrast);
+  font-weight: 600;
+}
+
+.test-paused {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
 }
 
 /* ---------- Schnellerfassung ---------- */

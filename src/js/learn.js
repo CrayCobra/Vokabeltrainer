@@ -57,5 +57,10 @@ export function createSessionQueue(ids) {
       const idx = queue.indexOf(cardId);
       if (idx !== -1) queue.splice(idx, 1);
     },
+    // Hängt weitere Karten-IDs an, etwa wenn der Testmodus den Stapel erneut durchläuft,
+    // weil das gewählte Ziel noch nicht erreicht ist.
+    enqueueMany: (newIds) => {
+      queue.push(...newIds);
+    },
   };
 }

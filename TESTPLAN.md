@@ -43,6 +43,50 @@ wieder verschwand; behoben, indem die Toast-Region einmalig außerhalb der neu a
 Ansicht in `app.js` erzeugt wird. Anschließend außerdem die Toast-Position von unten nach oben
 verschoben, da unten die Bedienelemente der Lernkarte im Daumenbereich liegen.
 
+## Inkrement 3 – automatisiert abgedeckt
+
+| Datei | Prüft |
+|---|---|
+| `test/testgoal.test.mjs` | `isGoalReached`/`describeGoalProgress` für alle drei Zielarten: Kartenanzahl (richtige plus falsche Antworten), Dauer (aktive Millisekunden gegen Sekundenziel), Trefferquote (Mindestanzahl UND Quote müssen gleichzeitig erfüllt sein); `formatDuration`, `describeGoalLabel` |
+| `test/learn.test.mjs` | `enqueueMany` (Wiederholung des Stapels, wenn die Warteschlange leer, das Ziel aber noch nicht erreicht ist) |
+
+Der Testmodus teilt sich die Kastenlogik, die Warteschlange und das Korrekturfenster mit dem
+Lernmodus (Inkrement 2) über gemeinsam genutzten Code (`applyLearningResult`, `buildQueue`,
+`createSessionQueue`, das per Chrome DevTools Protocol geprüfte `buildFlipCard`-Widget in
+`views.js`) und wird dadurch bereits von dessen Tests mitabgedeckt. Zusätzlich per DevTools
+Protocol gegen `dist/app.html` gefahren: Umschalten zwischen den drei Zielarten (passende
+Zusatzfelder ein-/ausgeblendet), ein Test mit einem Kartenanzahl-Ziel über der Stapelgröße (der
+Stapel wiederholt sich nachweisbar, Fortschritt zählt korrekt weiter, „Ziel erreicht ✓“
+erscheint erst bei Erreichen), der Ergebnisbildschirm (Ziel, Trefferquote, Dauer, Liste falscher
+Karten), „Übungsrunde mit falschen Karten starten“ (wechselt korrekt in eine neue Lernsitzung
+mit genau dieser Kartenmenge), ein Zeitziel mit Pause (Fortschrittsanzeige friert ein, Karte wird
+ausgeblendet), Verlängern (+2 Minuten erhöht das sichtbare Ziel sofort) und die tatsächliche
+Sitzungsdauer in IndexedDB (Pausenzeit korrekt ausgeklammert), sowie das Wegnavigieren mitten in
+einer Testsitzung (Sitzung wird mit dem bisherigen Stand protokolliert, ein erneuter Aufruf der
+Ansicht zeigt eine frische Einrichtung statt des alten Standes).
+
+Dabei zeigten sich zwei echte Fehler. Erstens fehlte `testgoal.js` in `build.mjs`s
+`MODULE_ORDER`: die gebündelte Datei war syntaktisch gültig (der eigene Regex-„Bundler“ entfernt
+import-Zeilen unabhängig davon, ob das Modul tatsächlich mitgebaut wurde), verwies zur Laufzeit
+aber auf nicht definierte Namen (`ReferenceError: describeGoalProgress is not defined`) – von den
+`node --test`-Tests unbemerkt, da sie echte ES-Module importieren und nie das Bündel selbst
+ausführen. Behoben, indem `build.mjs` vor dem Bündeln jetzt `validateModuleGraph()` ausführt: sie
+gleicht die Dateien in `src/js/` mit `MODULE_ORDER` ab (nichts vergessen, nichts Verwaistes) und
+prüft, dass jedes `import`-Ziel einer Datei in `MODULE_ORDER` vor dieser Datei steht. Ein
+künftiges Vergessen lässt den Bau jetzt fehlschlagen, statt eine kaputte Datei stillschweigend
+auszuliefern; `test/build.test.mjs` führt `build.mjs` ohnehin bei jedem Testlauf real aus und
+deckt einen Rückfall damit automatisch ab. Zweitens fiel beim Umsetzen auf, dass
+`aria-labelledby="learn-heading"` während der laufenden Lernsitzung (nicht aber bei Einrichtung
+oder Abschluss) ins Leere zeigte, weil die aktive Sitzung nie eine Überschrift mit dieser ID
+rendert hat; behoben mit einer visuell verborgenen `<h2>`, das Muster gilt jetzt auch für den
+Testmodus.
+
+**Offener Befund, nicht in Inkrement 3 behoben:** Der Entwurf (Abschnitt 9) verlangt, dass helles
+und dunkles Erscheinungsbild zusätzlich zur Systemeinstellung manuell überschreibbar sind
+("lassen sich überschreiben"). Bislang folgt die Oberfläche ausschließlich
+`prefers-color-scheme`; ein manueller Umschalter fehlt noch. Das ist kein Testmodus-Thema,
+sollte aber vor der Abnahme nachgezogen werden.
+
 Die Ansichten enthalten DOM-Code und werden absichtlich nicht mit einer zusätzlichen
 Browser-Simulationsbibliothek automatisiert getestet, um keine externe Abhängigkeit
 einzuführen. Vor jeder Veröffentlichung sollte die DevTools-Protocol-Prüfung wiederholt werden,
@@ -77,22 +121,17 @@ Nicht automatisierbar ohne echten Browser bzw. echtes Gerät:
   Rückseite (zeigt „(leer)“ statt einer leeren Fläche).
 - Einstreuverhältnis und Wiedervorlage bei einem Stapel mit sehr vielen Reparaturkarten (mehr
   Reparatur- als Regulärkarten) optisch gegenprüfen.
+- Testmodus mit Zeitziel über die volle Dauer laufen lassen (nicht nur wenige Sekunden wie im
+  automatisierten Lauf), inklusive mehrfachem Pausieren/Fortsetzen über mehrere Minuten.
+- Trefferquote-Ziel mit tatsächlich schwankender Quote durchspielen (unter das Ziel fallen, wieder
+  darüber steigen) und die Anzeige dabei beobachten.
 
-## Testpläne für Inkremente 3–6
+## Testpläne für Inkremente 4–6
 
 Diese Inkremente existieren noch nicht; die folgenden Punkte legen fest, was jeweils mit
 automatisierten `node --test`-Regressionstests abgedeckt wird, sobald die Funktion gebaut ist.
 Grundlage sind die Abnahmekriterien aus CLAUDE.md und die Regeln aus
 `vokabel-app-entwurf.md`.
-
-### Inkrement 3 – Testmodus und Zielarten
-
-- Alle drei Zielarten (Dauer, Kartenanzahl, Trefferquote über Mindestanzahl) erkennen das
-  Erreichen korrekt.
-- Zeitziele sind pausierbar und verlängerbar (WCAG-2.2-Anforderung), Pausezeit zählt nicht mit.
-- Testmodus wirkt auf Kästen/Reparaturkiste identisch zum Lernmodus (siehe Inkrement 2).
-- Ergebnisbildschirm: korrekte Trefferquote, Dauer, Liste falscher Karten; „Übungsrunde mit
-  falschen Karten starten“ übernimmt genau diese Kartenmenge.
 
 ### Inkrement 4 – Statistik
 

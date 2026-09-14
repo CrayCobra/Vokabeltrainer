@@ -6,6 +6,9 @@ import {
   createEmptyDocument,
   createCard,
   applyCardEdit,
+  applyLearningResult,
+  recordSession,
+  localDateIso,
   addCards,
   replaceCard,
   deleteCards,
@@ -138,4 +141,100 @@ test('findDuplicateFronts erkennt gleiche Vorderseiten', () => {
   const duplicates = findDuplicateFronts(doc, [{ a: 'Apfel', b: 'apple (neu)' }, { a: 'Birne', b: 'pear' }]);
   assert.equal(duplicates.length, 1);
   assert.equal(duplicates[0].existing.a, 'Apfel');
+});
+
+test('applyLearningResult: richtige Antwort hebt den Kasten um eins, höchstens bis 5', () => {
+  let card = createCard({ a: 'x', b: 'y' });
+  for (const expectedBox of [2, 3, 4, 5, 5]) {
+    card = applyLearningResult(card, true);
+    assert.equal(card.box, expectedBox);
+  }
+  assert.equal(card.seen, 5);
+  assert.equal(card.correct, 5);
+  assert.equal(card.wrong, 0);
+});
+
+test('applyLearningResult: falsche Antwort setzt Kasten 1, Zähler 0 und legt in die Reparaturkiste', () => {
+  let card = createCard({ a: 'x', b: 'y' });
+  card = applyLearningResult(card, true);
+  card = applyLearningResult(card, true); // Kasten 3
+  card = applyLearningResult(card, false);
+  assert.equal(card.box, 1);
+  assert.equal(card.streak, 0);
+  assert.equal(card.repair, true);
+  assert.equal(card.wrong, 1);
+});
+
+test('applyLearningResult: Reparaturkiste verlangt vier richtige Antworten in Folge und landet dann in Kasten 2', () => {
+  let card = { ...createCard({ a: 'x', b: 'y' }), box: 1, repair: true, streak: 0 };
+  card = applyLearningResult(card, true);
+  assert.equal(card.repair, true, 'nach 1 von 4 noch in der Reparaturkiste');
+  assert.equal(card.box, 1, 'Kasten bleibt während der Reparatur eingefroren');
+  card = applyLearningResult(card, true);
+  card = applyLearningResult(card, true);
+  assert.equal(card.repair, true, 'nach 3 von 4 noch in der Reparaturkiste');
+  card = applyLearningResult(card, true);
+  assert.equal(card.repair, false, 'nach 4 richtigen in Folge verlassen');
+  assert.equal(card.box, 2, 'landet gezielt in Kasten 2, nicht durch Hochzählen');
+});
+
+test('applyLearningResult: ein einzelner Fehler in der Reparaturkiste setzt den Zähler zurück auf 0', () => {
+  let card = { ...createCard({ a: 'x', b: 'y' }), box: 1, repair: true, streak: 0 };
+  card = applyLearningResult(card, true);
+  card = applyLearningResult(card, true);
+  card = applyLearningResult(card, false);
+  assert.equal(card.streak, 0);
+  assert.equal(card.repair, true);
+  assert.equal(card.box, 1);
+  // Muss danach wieder von vorn vier richtige in Folge sammeln.
+  card = applyLearningResult(card, true);
+  card = applyLearningResult(card, true);
+  card = applyLearningResult(card, true);
+  assert.equal(card.repair, true);
+  card = applyLearningResult(card, true);
+  assert.equal(card.repair, false);
+  assert.equal(card.box, 2);
+});
+
+test('localDateIso formatiert das lokale Kalenderdatum ohne UTC-Umrechnung', () => {
+  const date = new Date(2026, 8, 14, 23, 30); // 14. September 2026, lokale Zeit
+  assert.equal(localDateIso(date), '2026-09-14');
+});
+
+test('recordSession hängt eine Sitzung an und bucht sie auf den lokalen Starttag', () => {
+  let doc = createEmptyDocument({ deckName: 'x', langA: 'a', langB: 'b' });
+  const localNow = new Date();
+  const session = {
+    date: localNow.toISOString(),
+    mode: 'learn',
+    order: 'random',
+    direction: 'ab',
+    correct: 8,
+    wrong: 2,
+    seconds: 120,
+  };
+  doc = recordSession(doc, session);
+  assert.equal(doc.sessions.length, 1);
+  assert.deepEqual(doc.sessions[0], session);
+  const todayKey = localDateIso(localNow);
+  assert.deepEqual(doc.days, [{ date: todayKey, correct: 8, wrong: 2, seconds: 120 }]);
+});
+
+test('recordSession bündelt mehrere Sitzungen desselben Tages in einem days-Eintrag', () => {
+  let doc = createEmptyDocument({ deckName: 'x', langA: 'a', langB: 'b' });
+  const localNow = new Date();
+  const makeSession = (correct, wrong, seconds) => ({
+    date: localNow.toISOString(),
+    mode: 'learn',
+    order: 'random',
+    direction: 'ab',
+    correct,
+    wrong,
+    seconds,
+  });
+  doc = recordSession(doc, makeSession(5, 1, 60));
+  doc = recordSession(doc, makeSession(3, 2, 90));
+  assert.equal(doc.sessions.length, 2);
+  assert.equal(doc.days.length, 1);
+  assert.deepEqual(doc.days[0], { date: localDateIso(localNow), correct: 8, wrong: 3, seconds: 150 });
 });

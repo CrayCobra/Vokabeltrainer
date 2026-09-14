@@ -24,6 +24,15 @@ export function nowIso() {
   return new Date().toISOString();
 }
 
+// Lokales Kalenderdatum (nicht UTC): Tagesgrenze für Serie und Heatmap ist Mitternacht in
+// der Zeitzone des Geräts.
+export function localDateIso(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function createEmptyDocument({ profileName = '', uiLang = 'de', deckName, langA, langB, created = nowIso(), appVersion = '' } = {}) {
   if (!deckName || !deckName.trim()) throw new Error('Der Stapel braucht einen Namen.');
   if (!langA || !langA.trim()) throw new Error('Sprache A fehlt.');
@@ -68,6 +77,63 @@ export function applyCardEdit(card, { a, b, marked } = {}) {
   if (marked != null && marked !== card.marked) { next.marked = marked; touched = true; }
   if (touched) next.changed = nowIso();
   return next;
+}
+
+// Wendet das Ergebnis einer Lern- oder Testantwort auf eine Karte an. Eine richtige Antwort
+// hebt den Kasten um eins (höchstens bis 5); während der Reparaturkiste bleibt der Kasten
+// stattdessen eingefroren, bis viermal hintereinander richtig geantwortet wurde – erst dann
+// verlässt die Karte die Reparaturkiste und landet gezielt in Kasten 2 (nicht durch
+// fortlaufendes Hochzählen), damit der Aufwand sichtbar belohnt wird. Eine falsche Antwort
+// setzt Kasten und Zähler zurück und legt die Karte in die Reparaturkiste.
+export function applyLearningResult(card, correct, now = nowIso()) {
+  let { box, streak, repair } = card;
+  if (correct) {
+    streak += 1;
+    if (repair) {
+      if (streak >= 4) {
+        repair = false;
+        box = 2;
+      }
+    } else {
+      box = Math.min(box + 1, 5);
+    }
+  } else {
+    box = 1;
+    streak = 0;
+    repair = true;
+  }
+  return {
+    ...card,
+    box,
+    streak,
+    repair,
+    seen: card.seen + 1,
+    correct: card.correct + (correct ? 1 : 0),
+    wrong: card.wrong + (correct ? 0 : 1),
+    lastSeen: now,
+    changed: now,
+  };
+}
+
+// Hängt eine abgeschlossene Sitzung an sessions[] an und bucht sie in days[] auf den lokalen
+// Kalendertag ihres Starts (auch wenn die Sitzung über Mitternacht hinaus lief).
+export function recordSession(doc, session) {
+  const sessions = [...doc.sessions, session];
+  const dateKey = localDateIso(new Date(session.date));
+  const days = [...doc.days];
+  const idx = days.findIndex((d) => d.date === dateKey);
+  if (idx === -1) {
+    days.push({ date: dateKey, correct: session.correct, wrong: session.wrong, seconds: session.seconds });
+    days.sort((a, b) => (a.date < b.date ? -1 : 1));
+  } else {
+    days[idx] = {
+      ...days[idx],
+      correct: days[idx].correct + session.correct,
+      wrong: days[idx].wrong + session.wrong,
+      seconds: days[idx].seconds + session.seconds,
+    };
+  }
+  return { ...doc, sessions, days };
 }
 
 export function addCards(doc, newCards) {

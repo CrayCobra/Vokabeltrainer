@@ -24,6 +24,8 @@ const MODULE_ORDER = [
   'capture.js',
   'fileio.js',
   'storage.js',
+  'learn.js',
+  'bufferedwriter.js',
   'views.js',
   'app.js',
 ];

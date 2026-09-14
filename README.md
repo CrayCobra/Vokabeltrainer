@@ -4,7 +4,8 @@ Digitaler Karteikasten, lokal im Browser, ohne Konto und ohne Internetverbindung
 Laufzeit. Die fachliche Spezifikation steht in [`vokabel-app-entwurf.md`](vokabel-app-entwurf.md),
 die Regeln für die Zusammenarbeit in [`CLAUDE.md`](CLAUDE.md).
 
-Stand: Inkrement 1 (Datenmodell, Speicherschicht, Editor).
+Stand: Inkrement 2 (Datenmodell, Speicherschicht, Editor, Lernmodus mit Kästen und
+Reparaturkiste).
 
 ## Bauen
 
@@ -29,21 +30,23 @@ Prüfliste, die einen echten Browser voraussetzt.
 
 ```
 src/
-  index.html       Grundgerüst, lädt js/app.js als ES-Modul (nur für lokale Entwicklung
-                    über einen Webserver – file:// scheitert an ES-Modul-CORS-Regeln)
-  app.css           Stylesheet, keine externen Schriften/Assets
-  icon.svg          App-Symbol
+  index.html          Grundgerüst, lädt js/app.js als ES-Modul (nur für lokale Entwicklung
+                      über einen Webserver – file:// scheitert an ES-Modul-CORS-Regeln)
+  app.css             Stylesheet, keine externen Schriften/Assets
+  icon.svg            App-Symbol
   js/
-    model.js        Datenmodell, Validierung, Migration, Zusammenführung
-    csv.js           CSV-Import (Kodierung, Trennzeichen, Parser)
+    model.js          Datenmodell, Validierung, Migration, Zusammenführung, Kastenregeln
+    csv.js            CSV-Import (Kodierung, Trennzeichen, Parser)
     capture.js        Schnellerfassung
-    fileio.js        Export/Import als .vok.json
+    fileio.js         Export/Import als .vok.json
     storage.js        IndexedDB-Adapter + Speicher-Repository
-    icons.js           Eingebettete SVG-Symbole
-    dom.js              Kleiner DOM-Bau-Helfer
-    views.js            Ansichten
-    app.js               Bootstrap, Routing, Zustand
-build.mjs            Abhängigkeitsfreies Bau-Skript
+    learn.js          Lernsitzung: Reihenfolgen, Einstreuen, Wiedervorlage
+    bufferedwriter.js Gebündeltes Schreiben (z. B. nach jeder Bewertung)
+    icons.js          Eingebettete SVG-Symbole
+    dom.js            Kleiner DOM-Bau-Helfer
+    views.js          Ansichten
+    app.js            Bootstrap, Routing, Zustand
+build.mjs             Abhängigkeitsfreies Bau-Skript
 ```
 
 Kein Framework, kein Build-Schritt mit fremden Werkzeugen, keine Laufzeitabhängigkeiten.

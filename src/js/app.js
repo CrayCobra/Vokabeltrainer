@@ -3,11 +3,13 @@
 
 import { APP_VERSION } from './version.js';
 import { createIndexedDbAdapter, createRepository } from './storage.js';
+import { createBufferedWriter } from './bufferedwriter.js';
 import { renderOnboarding, renderShell } from './views.js';
 import { icons } from './icons.js';
 import { serializeDocument, buildExportFilename } from './fileio.js';
+import { recordSession } from './model.js';
 
-const VIEWS = ['karten', 'erfassen', 'import'];
+const VIEWS = ['karten', 'erfassen', 'import', 'lernen'];
 
 function freshCardsSession() {
   return {
@@ -39,14 +41,23 @@ export async function startApp(root) {
   let emptyReason = null;
   let toastTimeout = null;
 
+  // Liegt außerhalb von root, damit ein Neuaufbau der Ansicht (renderShell räumt root bei
+  // jedem Aufruf und baut ihn neu auf) einen gerade angezeigten Toast nicht sofort wieder
+  // entfernt – etwa die 3-Sekunden-Korrektur nach jeder bewerteten Lernkarte.
+  const toastRegion = document.createElement('div');
+  toastRegion.id = 'toast-region';
+  toastRegion.setAttribute('role', 'status');
+  toastRegion.setAttribute('aria-live', 'polite');
+  document.body.appendChild(toastRegion);
+
   const state = {
     view: viewFromHash(),
     cardsSession: freshCardsSession(),
+    learnSession: null,
   };
 
-  function showToast({ message, actionLabel, onAction }) {
-    const region = document.getElementById('toast-region');
-    if (!region) return;
+  function showToast({ message, actionLabel, onAction, duration = 7000 }) {
+    const region = toastRegion;
     if (toastTimeout) clearTimeout(toastTimeout);
     region.textContent = '';
     const toast = document.createElement('div');
@@ -77,7 +88,7 @@ export async function startApp(root) {
     region.appendChild(toast);
     toastTimeout = setTimeout(() => {
       if (region.contains(toast)) region.textContent = '';
-    }, 7000);
+    }, duration);
   }
 
   function render() {
@@ -108,6 +119,51 @@ export async function startApp(root) {
     return doc;
   }
 
+  // Für Aktionen, die schnell hintereinander schreiben (eine Kastenänderung nach jeder
+  // bewerteten Karte im Lernmodus): das Dokument wird sofort im Speicher aktualisiert, das
+  // tatsächliche Schreiben auf IndexedDB aber gebündelt, damit die Oberfläche flüssig bleibt.
+  const writer = createBufferedWriter(async (docToSave) => {
+    try {
+      await repo.save(docToSave);
+    } catch (err) {
+      showToast({ message: describeStorageError(err) });
+    }
+  }, { delay: 400 });
+
+  function persistBuffered(newDoc) {
+    doc = newDoc;
+    writer.schedule(newDoc);
+  }
+
+  async function flushPersistence() {
+    await writer.flush();
+  }
+
+  async function endLearnSession(ls) {
+    await flushPersistence();
+    if (ls.correctCount + ls.wrongCount > 0) {
+      const seconds = Math.max(0, Math.round((Date.now() - ls.startMs) / 1000));
+      const session = {
+        date: ls.startedAt,
+        mode: 'learn',
+        order: ls.order,
+        direction: ls.direction,
+        correct: ls.correctCount,
+        wrong: ls.wrongCount,
+        seconds,
+      };
+      try {
+        await persist(recordSession(doc, session));
+      } catch {
+        // persist zeigt einen Fehler bereits als Toast; die Kastenstände der einzelnen
+        // Karten sind unabhängig davon schon gespeichert.
+      }
+      ls.finished = true;
+    } else {
+      state.learnSession = null;
+    }
+  }
+
   function exportDocument() {
     const stamped = { ...doc, meta: { ...doc.meta, lastBackup: new Date().toISOString() } };
     const text = serializeDocument(stamped);
@@ -135,19 +191,38 @@ export async function startApp(root) {
     icons,
     render,
     persist,
+    persistBuffered,
+    flushPersistence,
+    endLearnSession,
     setInitialDoc,
     showToast,
     exportDocument,
+    navigate(view) {
+      location.hash = view;
+    },
     refreshHeaderCount() {},
   };
 
   window.addEventListener('hashchange', () => {
     const next = viewFromHash();
-    if (next !== state.view) {
-      state.view = next;
-      state.cardsSession = freshCardsSession();
-      render();
+    if (next === state.view) return;
+    if (state.view === 'lernen' && state.learnSession && !state.learnSession.finished) {
+      const ls = state.learnSession;
+      endLearnSession(ls).finally(() => {
+        if (state.learnSession === ls) state.learnSession = null;
+      });
+    } else {
+      state.learnSession = null;
     }
+    state.view = next;
+    state.cardsSession = freshCardsSession();
+    render();
+  });
+
+  window.addEventListener('beforeunload', () => {
+    // Bestmögliches Nachholen eines noch ausstehenden gebündelten Schreibvorgangs; ohne
+    // Garantie, da der Browser das Beenden nicht zuverlässig aufhält.
+    flushPersistence();
   });
 
   const loaded = await repo.load();

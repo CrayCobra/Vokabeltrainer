@@ -22,16 +22,33 @@ Versionsnummer eingesetzt wurde.
 | `test/fileio.test.mjs` | **Abnahmekriterium „Export-Import-Durchlauf ergibt ein bitgleiches Dokument“**, Ablehnung beschädigter/unbekannter Dateien mit klarer Meldung, stabiler Dateiname |
 | `test/storage.test.mjs` | Speicherschicht-Logik (Erststart vs. geräumter Speicher) über ein Speicher-Double; die echte IndexedDB-Anbindung läuft nur im Browser (siehe manuelle Prüfung unten) |
 
-Die Ansichten (`src/js/views.js`, `src/js/app.js`) enthalten DOM-Code und werden absichtlich
-nicht mit einer zusätzlichen Browser-Simulationsbibliothek automatisiert getestet, um keine
-externe Abhängigkeit einzuführen. Sie wurden für diese Auslieferung stattdessen per Chrome
-DevTools Protocol gegen `dist/app.html` gefahren (Stapel anlegen, Schnellerfassung, Markieren,
-Löschen mit Rückgängig, Browser-Neustart mit gleichem Profil, geräumter Speicher mit aktiver
-Erklärung samt Sicherungsangebot) – alle Schritte ohne JavaScript-Fehler und mit korrektem
-Ergebnis. Vor jeder Veröffentlichung sollte das manuell wiederholt werden, siehe Prüfliste
-unten.
+## Inkrement 2 – automatisiert abgedeckt
 
-## Manuelle Prüfliste vor jedem „fertig“ (Inkrement 1)
+| Datei | Prüft |
+|---|---|
+| `test/model.test.mjs` | `applyLearningResult`: Kastenanstieg bis 5, Rücksetzung und Reparaturkiste bei Fehler, Kasten bleibt während der Reparatur eingefroren, Austritt erst nach vier richtigen in Folge mit gezieltem Sprung nach Kasten 2, ein Fehler in der Reparaturkiste setzt den Zähler zurück; `localDateIso` und `recordSession` (Buchung auf den lokalen Starttag, Bündelung mehrerer Sitzungen desselben Tages) |
+| `test/learn.test.mjs` | `buildQueue`: Reihenfolgen (zufällig/Eingabereihenfolge/nach Kasten), Einstreuverhältnis 2:3 zwischen Reparatur- und Regulärkarten, Filter „nur markiert“; `createSessionQueue`: eine falsch beantwortete Karte erscheint frühestens nach drei weiteren Karten wieder, Sonderfall sehr kurzer Restwarteschlange, `remove` für die Korrekturfunktion |
+| `test/bufferedwriter.test.mjs` | Bündelung schnell aufeinanderfolgender Schreibvorgänge zu einem verzögerten Aufruf, `flush()` erzwingt sofortiges Schreiben und verwirft den Timer |
+
+Die Lernansicht selbst (`renderLearnView` in `src/js/views.js`) wurde wie in Inkrement 1 per
+Chrome DevTools Protocol gegen `dist/app.html` gefahren: Sitzungseinrichtung inklusive
+deaktiviertem Start bei leerem Filter, Umdrehen und Bewerten per Maus **und** Tastatur
+(Leertaste, Pfeiltasten), die Korrektur innerhalb des 3-Sekunden-Fensters (inklusive Umbuchung
+von Zähler und Wiedervorlage), vorzeitiges Beenden einer Sitzung, sowie der komplette Ablauf bis
+zum Abschlussbildschirm mit anschließender Prüfung des tatsächlichen IndexedDB-Inhalts (Kasten-,
+Reparatur- und Zählerstände sowie der geschriebene `sessions`-/`days`-Eintrag). Dabei zeigte sich
+ein echter Fehler: `renderShell` baute bei jedem `ctx.render()` eine neue `#toast-region`, wodurch
+ein gerade angezeigter Toast (insbesondere die Korrekturmeldung nach jeder Bewertung) sofort
+wieder verschwand; behoben, indem die Toast-Region einmalig außerhalb der neu aufgebauten
+Ansicht in `app.js` erzeugt wird. Anschließend außerdem die Toast-Position von unten nach oben
+verschoben, da unten die Bedienelemente der Lernkarte im Daumenbereich liegen.
+
+Die Ansichten enthalten DOM-Code und werden absichtlich nicht mit einer zusätzlichen
+Browser-Simulationsbibliothek automatisiert getestet, um keine externe Abhängigkeit
+einzuführen. Vor jeder Veröffentlichung sollte die DevTools-Protocol-Prüfung wiederholt werden,
+siehe Prüfliste unten.
+
+## Manuelle Prüfliste vor jedem „fertig“
 
 Nicht automatisierbar ohne echten Browser bzw. echtes Gerät:
 
@@ -54,26 +71,19 @@ Nicht automatisierbar ohne echten Browser bzw. echtes Gerät:
   dass die Fehlermeldung beim Speichern erscheint statt eines stillen Datenverlusts.
 - `dist/pages/` auf einem echten GitHub-Pages-Deploy installieren und Offline-Start testen
   (volle Prüfung ist Abnahmekriterium von Inkrement 6, ein Rauchtest jetzt schon sinnvoll).
+- Lernsitzung auf einem echten Touchgerät: Tippen zum Umdrehen, beide Bewertungsflächen groß
+  genug und gut unterscheidbar, Korrekturmeldung rechtzeitig lesbar und antippbar.
+- Sehr lange Kartentexte in der Lernansicht (Umbruch statt Überlauf) und eine Karte mit leerer
+  Rückseite (zeigt „(leer)“ statt einer leeren Fläche).
+- Einstreuverhältnis und Wiedervorlage bei einem Stapel mit sehr vielen Reparaturkarten (mehr
+  Reparatur- als Regulärkarten) optisch gegenprüfen.
 
-## Testpläne für Inkremente 2–6
+## Testpläne für Inkremente 3–6
 
 Diese Inkremente existieren noch nicht; die folgenden Punkte legen fest, was jeweils mit
 automatisierten `node --test`-Regressionstests abgedeckt wird, sobald die Funktion gebaut ist.
 Grundlage sind die Abnahmekriterien aus CLAUDE.md und die Regeln aus
 `vokabel-app-entwurf.md`.
-
-### Inkrement 2 – Lernmodus, Kästen, Reparaturkiste
-
-- Kastenübergänge: richtige Antwort hebt um einen Kasten (Obergrenze 5), falsche Antwort setzt
-  auf Kasten 1, Streak auf 0, `repair: true`.
-- Reparaturkiste: Karte verlässt sie erst nach vier aufeinanderfolgenden richtigen Antworten und
-  landet dann in Kasten 2; ein einzelner Fehler setzt den Reparatur-Streak zurück auf 0.
-- Ziehreihenfolge: zufällig, sequentiell, nach Kasten aufsteigend – jeweils mit Einstreuquote
-  Reparatur- zu Regulärkarten von etwa 2:3 und der Regel, dass eine gerade falsch beantwortete
-  Karte erst nach mindestens drei weiteren Karten wiederkehrt.
-- Markierungsfilter schränkt die Sitzung ein, ohne den Kastenstand zu beeinflussen.
-- Korrekturfenster von drei Sekunden nach einer Bewertung.
-- Randfälle: leerer Stapel, Stapel mit genau einer Karte, alle Karten in der Reparaturkiste.
 
 ### Inkrement 3 – Testmodus und Zielarten
 

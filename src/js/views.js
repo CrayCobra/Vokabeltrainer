@@ -22,6 +22,13 @@ import { decodeCsvBytes, detectDelimiter, parseCsv, rowsToCards } from './csv.js
 import { parseImportedText } from './fileio.js';
 import { buildQueue } from './learn.js';
 import { describeGoalProgress, describeGoalLabel, formatDuration } from './testgoal.js';
+import {
+  computeCurrentStreak,
+  computeLongestStreak,
+  isCurrentWeekJokerAvailable,
+  buildHeatmapWeeks,
+  boxDistribution,
+} from './stats.js';
 
 function debounce(fn, wait) {
   let t;
@@ -141,6 +148,7 @@ export function renderShell(root, ctx) {
       { view: 'karten', label: 'Karten' },
       { view: 'erfassen', label: 'Erfassen' },
       { view: 'import', label: 'Import' },
+      { view: 'statistik', label: 'Statistik' },
     ].map(({ view, label }) =>
       el(
         'a',
@@ -196,6 +204,7 @@ export function renderShell(root, ctx) {
   else if (ctx.state.view === 'import') renderImportView(main, ctx);
   else if (ctx.state.view === 'testen') renderTestView(main, ctx);
   else if (ctx.state.view === 'einstellungen') renderSettingsView(main, ctx);
+  else if (ctx.state.view === 'statistik') renderStatsView(main, ctx);
   else renderLearnView(main, ctx);
 }
 
@@ -219,6 +228,121 @@ function renderSettingsView(container, ctx) {
       themeField,
     ])
   );
+}
+
+// ---------- Statistik ----------
+
+const HEATMAP_WEEKS = 26; // Immer alle 26 Wochen bauen; app.css blendet auf schmalen
+// Bildschirmen die ältesten 14 aus, sodass dort nur die jüngsten 12 sichtbar bleiben.
+const HEATMAP_NARROW_WEEKS = 12;
+
+function formatDateDe(isoDate) {
+  return new Date(`${isoDate}T00:00:00`).toLocaleDateString('de-DE', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function renderStatsView(container, ctx) {
+  const doc = ctx.doc;
+  const currentStreak = computeCurrentStreak(doc.days);
+  const longestStreak = computeLongestStreak(doc.days);
+  const jokerAvailable = isCurrentWeekJokerAvailable(doc.days);
+
+  const streakSection = el('section', { 'aria-labelledby': 'streak-heading' }, [
+    el('h2', { id: 'streak-heading' }, 'Lernserie'),
+    el('div', { class: 'streak-stats' }, [
+      el('div', { class: 'streak-stat' }, [
+        el('p', { class: 'streak-number' }, String(currentStreak)),
+        el('p', { class: 'hint' }, currentStreak === 1 ? 'Tag in Folge' : 'Tage in Folge'),
+      ]),
+      el('div', { class: 'streak-stat' }, [
+        el('p', { class: 'streak-number' }, String(longestStreak)),
+        el('p', { class: 'hint' }, 'längste Serie'),
+      ]),
+    ]),
+    el(
+      'span',
+      { class: jokerAvailable ? 'badge badge-goal-reached' : 'badge' },
+      jokerAvailable ? 'Wochenjoker verfügbar' : 'Wochenjoker verbraucht'
+    ),
+  ]);
+
+  const heatmapSection = renderHeatmapSection(doc);
+  const boxSection = renderBoxDistributionSection(doc);
+
+  container.append(
+    el('div', { class: 'stats-view' }, [streakSection, heatmapSection, boxSection])
+  );
+}
+
+function renderHeatmapSection(doc) {
+  const weeks = buildHeatmapWeeks(doc.days, HEATMAP_WEEKS);
+  const detail = el('p', { class: 'heatmap-detail', 'aria-live': 'polite' }, 'Ein Feld antippen für Details.');
+
+  const dayLabels = el(
+    'div',
+    { class: 'heatmap-day-labels' },
+    ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((label) => el('span', {}, label))
+  );
+
+  const weekColumns = weeks.map((week, weekIndex) => {
+    const narrow = weekIndex < HEATMAP_WEEKS - HEATMAP_NARROW_WEEKS;
+    const cells = week.map((cell) => {
+      if (cell.future) {
+        return el('span', { class: 'heatmap-cell heatmap-future', 'aria-hidden': 'true' });
+      }
+      const btn = el('button', {
+        type: 'button',
+        class: `heatmap-cell heatmap-level-${cell.level}`,
+        'aria-label': `${formatDateDe(cell.date)}: ${cell.correct} richtig, ${cell.wrong} falsch`,
+      });
+      const text = `${formatDateDe(cell.date)}: ${cell.correct} richtig, ${cell.wrong} falsch.`;
+      btn.addEventListener('focus', () => {
+        detail.textContent = text;
+      });
+      btn.addEventListener('click', () => {
+        detail.textContent = text;
+      });
+      return btn;
+    });
+    return el('div', { class: narrow ? 'heatmap-week heatmap-week-narrow-hidden' : 'heatmap-week' }, cells);
+  });
+
+  const legend = el('div', { class: 'heatmap-legend' }, [
+    el('span', { class: 'hint' }, 'Weniger'),
+    ...[0, 1, 2, 3, 4].map((level) => el('span', { class: `heatmap-cell heatmap-level-${level}`, 'aria-hidden': 'true' })),
+    el('span', { class: 'hint' }, 'Mehr'),
+  ]);
+
+  return el('section', { 'aria-labelledby': 'heatmap-heading' }, [
+    el('h2', { id: 'heatmap-heading' }, 'Heatmap'),
+    el('div', { class: 'heatmap-scroll' }, [el('div', { class: 'heatmap-grid' }, [dayLabels, ...weekColumns])]),
+    legend,
+    detail,
+  ]);
+}
+
+function renderBoxDistributionSection(doc) {
+  const dist = boxDistribution(doc.cards);
+  const maxCount = Math.max(1, ...Object.values(dist.counts));
+
+  const bars = [1, 2, 3, 4, 5].map((box) => {
+    const count = dist.counts[box];
+    const pct = Math.round((count / maxCount) * 100);
+    return el('div', { class: 'box-bar-row' }, [
+      el('span', { class: 'box-bar-label' }, `Kasten ${box}`),
+      el('div', { class: 'box-bar-track' }, [el('div', { class: 'box-bar-fill', style: `width: ${pct}%` })]),
+      el('span', { class: 'box-bar-count' }, String(count)),
+    ]);
+  });
+
+  return el('section', { 'aria-labelledby': 'boxdist-heading' }, [
+    el('h2', { id: 'boxdist-heading' }, 'Kastenverteilung'),
+    el('div', { class: 'box-bars' }, bars),
+    el('p', {}, `${dist.total} Karte${dist.total === 1 ? '' : 'n'} insgesamt, davon ${dist.repair} in der Reparaturkiste.`),
+  ]);
 }
 
 // ---------- Kartenliste ----------

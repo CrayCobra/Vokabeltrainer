@@ -28,6 +28,7 @@ const MODULE_ORDER = [
   'testgoal.js',
   'bufferedwriter.js',
   'theme.js',
+  'stats.js',
   'views.js',
   'app.js',
 ];

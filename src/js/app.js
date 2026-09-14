@@ -12,7 +12,7 @@ import { createSessionQueue } from './learn.js';
 import { describeGoalProgress } from './testgoal.js';
 import { loadThemePreference, saveThemePreference, applyThemePreference } from './theme.js';
 
-const VIEWS = ['karten', 'erfassen', 'import', 'lernen', 'testen', 'einstellungen'];
+const VIEWS = ['karten', 'erfassen', 'import', 'lernen', 'testen', 'einstellungen', 'statistik'];
 
 function freshCardsSession() {
   return {

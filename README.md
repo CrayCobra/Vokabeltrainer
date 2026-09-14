@@ -4,8 +4,9 @@ Digitaler Karteikasten, lokal im Browser, ohne Konto und ohne Internetverbindung
 Laufzeit. Die fachliche Spezifikation steht in [`vokabel-app-entwurf.md`](vokabel-app-entwurf.md),
 die Regeln für die Zusammenarbeit in [`CLAUDE.md`](CLAUDE.md).
 
-Stand: Inkrement 3 (Datenmodell, Speicherschicht, Editor, Lernmodus mit Kästen und
-Reparaturkiste, Testmodus mit den drei Zielarten, manuell überschreibbares Hell/Dunkel).
+Stand: Inkrement 4 (Datenmodell, Speicherschicht, Editor, Lernmodus mit Kästen und
+Reparaturkiste, Testmodus mit den drei Zielarten, manuell überschreibbares Hell/Dunkel,
+Statistik mit Lernserie, Heatmap und Kastenverteilung).
 
 ## Bauen
 
@@ -44,6 +45,7 @@ src/
     testgoal.js       Zielarten des Testmodus: Fortschritt, Erreicht-Prüfung
     bufferedwriter.js Gebündeltes Schreiben (z. B. nach jeder Bewertung)
     theme.js          Hell/Dunkel-Übersteuerung (localStorage, geräteweit)
+    stats.js          Lernserie mit Wochenjoker, Heatmap-Aufbereitung, Kastenverteilung
     icons.js          Eingebettete SVG-Symbole
     dom.js            Kleiner DOM-Bau-Helfer
     views.js          Ansichten

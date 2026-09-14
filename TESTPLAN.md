@@ -103,6 +103,35 @@ zuverlässig per Screenshot verifizierbar, die Persistenz und der korrekte Zeitp
 Dokumentquelltext aber schon); „Systemeinstellung folgen“ entfernt `data-theme` und den
 `localStorage`-Eintrag wieder vollständig.
 
+## Inkrement 4 – automatisiert abgedeckt
+
+| Datei | Prüft |
+|---|---|
+| `test/stats.test.mjs` | `computeCurrentStreak`: ununterbrochene Tage, ein Fehltag pro Kalenderwoche (Joker) bricht nicht, zählt aber selbst nicht mit, zwei Fehltage in derselben Woche brechen die Serie, der heutige Tag bricht nie (auch inaktiv), leere Historie ergibt 0, eine Serie über eine Monats- **und** Jahresgrenze hinweg (Woche Mo 30.12.2024–So 5.1.2025, Neujahr als Jokertag); `computeLongestStreak`: findet eine vergangene, längere Serie unabhängig vom aktuellen (kürzeren) Stand; `isCurrentWeekJokerAvailable`: verfügbar ohne Fehltag seit Montag, verbraucht nach dem ersten Fehltag, der heutige Tag wird nicht geprüft; `heatmapLevel` an allen Schwellenwerten; `buildHeatmapWeeks`: Wochenzahl/-ausrichtung, letzte Woche endet bei heute, Tage nach heute als `future` ohne Stufe; `boxDistribution` (Kästen, Reparaturkiste, Gesamtzahl) |
+
+Alle Datumsannahmen in den Tests (welcher Wochentag ein bestimmtes Datum ist) wurden vor dem
+Schreiben mit `new Date(...).getDay()` gegen echte Kalenderdaten geprüft, nicht nur angenommen.
+
+Die Statistik-Ansicht wurde per Chrome DevTools Protocol gegen `dist/app.html` gefahren: dazu
+wurden zehn lückenlos aufeinanderfolgende Tage (heute und neun zuvor) sowie unterschiedliche
+Kastenstände direkt in IndexedDB eingesetzt (ein realistischer mehrwöchiger Testablauf ließe
+sich nicht in einer einzelnen Sitzung durchspielen) und nach einem echten Neuladen der Seite
+geprüft: aktuelle und längste Serie zeigen beide 10, der Wochenjoker gilt als verfügbar, die
+Kastenverteilung zeigt die eingesetzten Werte korrekt inklusive Reparaturkisten-Größe. Die
+Heatmap enthält bei 26 Wochen 182 Zellen, von denen die nach heute liegenden korrekt als nicht
+anklickbare Platzhalter ohne Datenanspruch gerendert werden (bei einem Montag als „heute“ sind
+das die restlichen sechs Tage der laufenden Woche); ein Klick auf eine Zelle aktualisiert die
+Detailzeile mit Datum sowie richtigen/falschen Karten. Bei 375px Breite blendet `app.css` die
+ältesten 14 der 26 Wochen aus, sodass genau 12 sichtbar bleiben, wie im Entwurf für Smartphones
+gefordert.
+
+**Bewusste Abweichung von der 44-Pixel-Regel der Prüfliste:** Die Heatmap-Felder sind kleiner
+als 44px, weil ein Kalenderraster mit bis zu 26 Wochen als kompaktes Gitter sonst nicht
+darstellbar wäre. Datum sowie richtige/falsche Karten stehen vollständig im `aria-label` jeder
+Zelle (für Screenreader unabhängig von der optischen Größe) und zusätzlich als gut lesbarer Text
+in der Detailzeile nach Fokus oder Klick; die Bedienung ist damit nicht an das Treffen der
+kleinen Fläche gebunden.
+
 Die Ansichten enthalten DOM-Code und werden absichtlich nicht mit einer zusätzlichen
 Browser-Simulationsbibliothek automatisiert getestet, um keine externe Abhängigkeit
 einzuführen. Vor jeder Veröffentlichung sollte die DevTools-Protocol-Prüfung wiederholt werden,
@@ -141,24 +170,19 @@ Nicht automatisierbar ohne echten Browser bzw. echtes Gerät:
   automatisierten Lauf), inklusive mehrfachem Pausieren/Fortsetzen über mehrere Minuten.
 - Trefferquote-Ziel mit tatsächlich schwankender Quote durchspielen (unter das Ziel fallen, wieder
   darüber steigen) und die Anzeige dabei beobachten.
+- Echte mehrwöchige Nutzung beobachten (nicht nur eingesetzte Testdaten): Serie, längster Stand
+  und Wochenjoker-Anzeige bleiben über echte Tageswechsel hinweg korrekt, insbesondere um
+  Mitternacht und beim ersten Öffnen an einem neuen Tag.
+- Heatmap auf einem echten Touchgerät: kleine Felder lassen sich trotzdem treffen, Zoomen auf
+  200% bleibt bedienbar, Scrollen funktioniert per Wischgeste zusätzlich zur Tastatur.
+- Farbstufen der Heatmap mit einem Rot-Grün-Schwäche-Simulator gegenprüfen.
 
-## Testpläne für Inkremente 4–6
+## Testpläne für Inkremente 5–6
 
 Diese Inkremente existieren noch nicht; die folgenden Punkte legen fest, was jeweils mit
 automatisierten `node --test`-Regressionstests abgedeckt wird, sobald die Funktion gebaut ist.
 Grundlage sind die Abnahmekriterien aus CLAUDE.md und die Regeln aus
 `vokabel-app-entwurf.md`.
-
-### Inkrement 4 – Statistik
-
-- Lernserie: Kalendertage mit mindestens einer abgeschlossenen Sitzung, ein Joker pro
-  Kalenderwoche (Montag–Sonntag), zwei Fehltage in derselben Woche brechen die Serie,
-  Tests über Monats- und Jahresgrenzen hinweg.
-- Tagesgrenze ist Mitternacht in der lokalen Zeitzone; eine Sitzung über Mitternacht zählt für
-  den Starttag.
-- Heatmap-Intensitätsstufen aus echten Tageswerten, inklusive Randfall „kein Eintrag für einen
-  Tag“.
-- Kastenverteilung und Reparaturkisten-Größe aus dem aktuellen Kartenbestand.
 
 ### Inkrement 5 – Mehrsprachigkeit
 

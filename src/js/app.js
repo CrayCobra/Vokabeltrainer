@@ -10,8 +10,9 @@ import { serializeDocument, buildExportFilename } from './fileio.js';
 import { recordSession, nowIso } from './model.js';
 import { createSessionQueue } from './learn.js';
 import { describeGoalProgress } from './testgoal.js';
+import { loadThemePreference, saveThemePreference, applyThemePreference } from './theme.js';
 
-const VIEWS = ['karten', 'erfassen', 'import', 'lernen', 'testen'];
+const VIEWS = ['karten', 'erfassen', 'import', 'lernen', 'testen', 'einstellungen'];
 
 function freshCardsSession() {
   return {
@@ -42,6 +43,19 @@ export async function startApp(root) {
   let doc = null;
   let emptyReason = null;
   let toastTimeout = null;
+
+  // Bereits vor dem ersten Rendern anwenden (ein Inline-Skript in index.html tut dasselbe
+  // noch vor dem Laden dieses Skripts, damit kein falsches Erscheinungsbild aufblitzt); hier
+  // nur zur Bestätigung und für spätere Änderungen über die Einstellungen.
+  let themePreference = loadThemePreference();
+  applyThemePreference(themePreference);
+
+  function setThemePreference(value) {
+    themePreference = value;
+    saveThemePreference(value);
+    applyThemePreference(value);
+    render();
+  }
 
   // Liegt außerhalb von root, damit ein Neuaufbau der Ansicht (renderShell räumt root bei
   // jedem Aufruf und baut ihn neu auf) einen gerade angezeigten Toast nicht sofort wieder
@@ -350,6 +364,10 @@ export async function startApp(root) {
     extendTestSession,
     endTestSession,
     testSessionStats,
+    get themePreference() {
+      return themePreference;
+    },
+    setThemePreference,
     setInitialDoc,
     showToast,
     exportDocument,

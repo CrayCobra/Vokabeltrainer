@@ -5,7 +5,7 @@ Laufzeit. Die fachliche Spezifikation steht in [`vokabel-app-entwurf.md`](vokabe
 die Regeln für die Zusammenarbeit in [`CLAUDE.md`](CLAUDE.md).
 
 Stand: Inkrement 3 (Datenmodell, Speicherschicht, Editor, Lernmodus mit Kästen und
-Reparaturkiste, Testmodus mit den drei Zielarten).
+Reparaturkiste, Testmodus mit den drei Zielarten, manuell überschreibbares Hell/Dunkel).
 
 ## Bauen
 
@@ -43,6 +43,7 @@ src/
     learn.js          Lernsitzung: Reihenfolgen, Einstreuen, Wiedervorlage
     testgoal.js       Zielarten des Testmodus: Fortschritt, Erreicht-Prüfung
     bufferedwriter.js Gebündeltes Schreiben (z. B. nach jeder Bewertung)
+    theme.js          Hell/Dunkel-Übersteuerung (localStorage, geräteweit)
     icons.js          Eingebettete SVG-Symbole
     dom.js            Kleiner DOM-Bau-Helfer
     views.js          Ansichten

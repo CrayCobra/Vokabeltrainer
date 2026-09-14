@@ -175,6 +175,16 @@ export function renderShell(root, ctx) {
         },
         [icons.download(), el('span', {}, 'Sichern')]
       ),
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'icon-btn',
+          'aria-label': 'Einstellungen',
+          onclick: () => ctx.navigate('einstellungen'),
+        },
+        [icons.settings()]
+      ),
     ]),
   ]);
 
@@ -185,7 +195,30 @@ export function renderShell(root, ctx) {
   else if (ctx.state.view === 'erfassen') renderCaptureView(main, ctx);
   else if (ctx.state.view === 'import') renderImportView(main, ctx);
   else if (ctx.state.view === 'testen') renderTestView(main, ctx);
+  else if (ctx.state.view === 'einstellungen') renderSettingsView(main, ctx);
   else renderLearnView(main, ctx);
+}
+
+// ---------- Einstellungen ----------
+// Geräte-/Profilweite Voreinstellungen, unabhängig vom Stapel. Hier soll später auch die
+// Wahl der Oberflächensprache (Inkrement 5) hinzukommen.
+
+function renderSettingsView(container, ctx) {
+  const current = ctx.themePreference;
+  const themeField = el('fieldset', {}, [
+    el('legend', {}, 'Erscheinungsbild'),
+    radioOption('theme', 'system', 'Systemeinstellung folgen', current === 'system'),
+    radioOption('theme', 'light', 'Hell', current === 'light'),
+    radioOption('theme', 'dark', 'Dunkel', current === 'dark'),
+  ]);
+  themeField.addEventListener('change', (e) => ctx.setThemePreference(e.target.value));
+
+  container.append(
+    el('section', { 'aria-labelledby': 'settings-heading' }, [
+      el('h2', { id: 'settings-heading' }, 'Einstellungen'),
+      themeField,
+    ])
+  );
 }
 
 // ---------- Kartenliste ----------

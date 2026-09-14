@@ -2,7 +2,7 @@
 // Jede Funktion liefert ein <svg>-Element mit aria-hidden, da Icons stets neben
 // beschriftetem Text stehen und selbst keine eigene Bedeutung transportieren.
 
-function svg(pathD, { viewBox = '0 0 24 24', extra } = {}) {
+function svg(pathD, { viewBox = '0 0 24 24', extra, circles } = {}) {
   const ns = 'http://www.w3.org/2000/svg';
   const el = document.createElementNS(ns, 'svg');
   el.setAttribute('viewBox', viewBox);
@@ -21,6 +21,18 @@ function svg(pathD, { viewBox = '0 0 24 24', extra } = {}) {
       p.setAttribute('stroke-linecap', 'round');
       p.setAttribute('stroke-linejoin', 'round');
       el.appendChild(p);
+    }
+  }
+  if (Array.isArray(circles)) {
+    for (const { cx, cy, r } of circles) {
+      const c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', cx);
+      c.setAttribute('cy', cy);
+      c.setAttribute('r', r);
+      c.setAttribute('fill', 'none');
+      c.setAttribute('stroke', 'currentColor');
+      c.setAttribute('stroke-width', '2');
+      el.appendChild(c);
     }
   }
   if (extra) el.appendChild(extra);
@@ -50,4 +62,12 @@ export const icons = {
   check: () => svg(['M4 12l5 5L20 6']),
   warning: () => svg(['M12 3l10 18H2L12 3Z', 'M12 10v4', 'M12 17h.01']),
   undo: () => svg(['M9 5L4 10l5 5', 'M4 10h10a6 6 0 0 1 0 12h-2']),
+  settings: () =>
+    svg(['M3 6h5', 'M12 6h9', 'M3 12h10', 'M17 12h4', 'M3 18h3', 'M10 18h11'], {
+      circles: [
+        { cx: 10, cy: 6, r: 2 },
+        { cx: 15, cy: 12, r: 2 },
+        { cx: 8, cy: 18, r: 2 },
+      ],
+    }),
 };

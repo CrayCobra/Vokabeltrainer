@@ -81,11 +81,27 @@ oder Abschluss) ins Leere zeigte, weil die aktive Sitzung nie eine Überschrift 
 rendert hat; behoben mit einer visuell verborgenen `<h2>`, das Muster gilt jetzt auch für den
 Testmodus.
 
-**Offener Befund, nicht in Inkrement 3 behoben:** Der Entwurf (Abschnitt 9) verlangt, dass helles
-und dunkles Erscheinungsbild zusätzlich zur Systemeinstellung manuell überschreibbar sind
-("lassen sich überschreiben"). Bislang folgt die Oberfläche ausschließlich
-`prefers-color-scheme`; ein manueller Umschalter fehlt noch. Das ist kein Testmodus-Thema,
-sollte aber vor der Abnahme nachgezogen werden.
+## Nachtrag: manueller Hell/Dunkel-Umschalter
+
+Der Entwurf (Abschnitt 9) verlangt, dass helles und dunkles Erscheinungsbild zusätzlich zur
+Systemeinstellung manuell überschreibbar sind. Nachgezogen über eine neue Einstellungen-Ansicht
+(`#einstellungen`, erreichbar über ein neues Zahnrad-Symbol im Kopfbereich neben „Sichern“ –
+dieselbe Stelle, an der später die Wahl der Oberflächensprache aus Inkrement 5 hinzukommt).
+Die Wahl liegt in `localStorage` (`theme.js`), nicht im `.vok.json`-Dokument, da es sich um eine
+Geräteeinstellung und keinen Lernstand handelt.
+
+| Datei | Prüft |
+|---|---|
+| `test/theme.test.mjs` | `loadThemePreference` (Vorgabe „system“, unbekannte Werte werden verworfen), `saveThemePreference` (schreibt light/dark, löscht den Eintrag bei „system“, verweigert unbekannte Werte), `applyThemePreference` (setzt/entfernt `data-theme` auf einem Fake-Wurzelelement) |
+
+Per DevTools Protocol geprüft: Umschalten auf „Dunkel“ ändert `data-theme` und die berechnete
+Hintergrundfarbe sofort, der Wert steht in `localStorage`; ein vollständiges Neuladen der Seite
+(nicht nur ein erneutes Rendern) zeigt weiterhin Dunkel, ohne dass die Anwendung dafür geladen
+sein muss – ein kleines Inline-Skript in `index.html` setzt `data-theme` vor dem Laden von
+`app.css`, damit beim Start nicht kurz das falsche Erscheinungsbild aufblitzt (visuell nicht
+zuverlässig per Screenshot verifizierbar, die Persistenz und der korrekte Zeitpunkt im
+Dokumentquelltext aber schon); „Systemeinstellung folgen“ entfernt `data-theme` und den
+`localStorage`-Eintrag wieder vollständig.
 
 Die Ansichten enthalten DOM-Code und werden absichtlich nicht mit einer zusätzlichen
 Browser-Simulationsbibliothek automatisiert getestet, um keine externe Abhängigkeit

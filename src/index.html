@@ -6,6 +6,17 @@
 <meta name="application-version" content="__APP_VERSION__">
 <meta name="color-scheme" content="light dark">
 <title>Vokabeltrainer</title>
+<script>
+// Setzt eine zuvor gewählte Hell/Dunkel-Übersteuerung, bevor die Stile geladen werden, damit
+// beim Start nicht kurz das falsche Erscheinungsbild aufblitzt. Schlüssel muss zu
+// STORAGE_KEY in js/theme.js passen.
+(function () {
+  try {
+    var t = localStorage.getItem('vokabeltrainer.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>

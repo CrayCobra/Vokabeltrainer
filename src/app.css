@@ -21,8 +21,13 @@
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Hell/Dunkel folgt der Systemeinstellung, lässt sich aber über einen Schalter in den
+   Einstellungen überschreiben (data-theme auf <html>, siehe theme.js). Eine ausdrückliche
+   Wahl gewinnt in beide Richtungen: :not([data-theme="light"]) verhindert Dunkel trotz
+   dunklem System, wenn "Hell" gewählt wurde; der eigene [data-theme="dark"]-Block erzwingt
+   Dunkel trotz hellem System, wenn "Dunkel" gewählt wurde. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14171a;
     --bg-muted: #1e2226;
     --text: #f2f4f7;
@@ -37,7 +42,30 @@
     --success: #4ada6f;
     --success-contrast: #0a2e12;
     --focus-ring: #6ea8fe;
+    color-scheme: dark;
   }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #14171a;
+  --bg-muted: #1e2226;
+  --text: #f2f4f7;
+  --text-muted: #b7bec6;
+  --border: #3a4046;
+  --accent: #6ea8fe;
+  --accent-contrast: #0b1220;
+  --danger: #ff8a80;
+  --danger-contrast: #2a0b08;
+  --warning-bg: #3a2a0a;
+  --warning-border: #d99a3a;
+  --success: #4ada6f;
+  --success-contrast: #0a2e12;
+  --focus-ring: #6ea8fe;
+  color-scheme: dark;
 }
 
 * {
